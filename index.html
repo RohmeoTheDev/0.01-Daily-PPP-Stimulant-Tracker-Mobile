@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="PPP Tracker">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="icon" type="image/png" href="icon-180.png">
+  <title>Ro's Stimulant Tracker</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+      color: #1a1a1a;
+      min-height: 100vh;
+      padding: 0;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: max(32px, env(safe-area-inset-bottom));
+    }
+    #app { max-width: 500px; margin: 0 auto; padding: 0 16px 16px; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script type="text/babel">
+    // ============ SUPABASE CONFIG ============
+    const SUPABASE_URL = 'https://tblfeugbatbwkzvqfbcw.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRibGZldWdiYXRid2t6dnFmYmN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3ODUzMjgsImV4cCI6MjA4NjM2MTMyOH0.s8TQ6V8RrU_kEYV8MDSC95srlhlMuQWy_oLh3DC8lAI';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const DB_TABLE = 'stimulant_entries';
+    const IDB_NAME = 'RoStimulantDB';
+    const LS_KEY = 'roStimulantHistory';
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // ============ STYLES ============
+    const styles = {
+      card: {
+        background: 'rgba(255, 255, 255, 0.9)',
+        backdropFilter: 'blur(10px)',
+        border: '1px solid rgba(229, 231, 235, 0.5)',
+        borderRadius: '16px',
+        padding: '16px',
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05)',
+        marginBottom: '16px'
+      },
+      btn: {
+        border: '1px solid rgba(229, 231, 235, 0.8)',
+        borderRadius: '8px',
+        padding: '6px 10px',
+        fontFamily: 'inherit',
+        fontSize: '11px',
+        fontWeight: 600,
+        cursor: 'pointer',
+        background: 'rgba(249, 250, 251, 0.8)',
+        color: '#374151',
+        transition: 'all 0.2s ease'
+      },
+      sectionTitle: {
+        fontWeight: 600,
+        fontSize: '11px',
+        textTransform: 'uppercase',
+        letterSpacing: '0.5px',
+        color: '#6b7280',
+        marginBottom: '8px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px'
+      }
+    };
+
+    // ============ CONSTANTS ============
+    const EMPTY_DAY = {
+      wakeUpTime: null,
+      coffee: 0,
+      caffeineGum: 0,
+      nicotineGum: 0,
+      // pain killers (count)
+      nurofen: 0,
+      panadol: 0,
+      // supplements (boolean)
+      modafinil: false,
+      methyleneBlue: false,
+      lTheanine: false,
+      endep: false,
+      restavit: false,
+      magnesium: false,
+      zinc: false,
+      // drinks (count)
+      boneBrothSaint: 0,
+      boneBrothHome: 0,
+      ketoneEsters: 0,
+      mctOil: 0,
+      heartSaltPinkSalt: 0,
+      soloLemonOrange: 0,
+      sparklingWater: 0,
+      plainWater: 0
+    };
+
+    const STIMULANT_ITEMS = [
+      { key: 'coffee', label: 'Coffee', mg: 90, color: '#5588BB' },
+      { key: 'caffeineGum', label: 'Caff Gum', mg: 30, color: '#D4AA44' },
+      { key: 'nicotineGum', label: 'Nicotine Gum', mg: 2, color: '#B85450', step: 0.5 }
+    ];
+
+    const PAINKILLER_ITEMS = [
+      { key: 'nurofen', label: 'Nurofen', color: '#E05A33' },
+      { key: 'panadol', label: 'Panadol', color: '#2E86AB' }
+    ];
+
+    const DAYTIME_SUPPLEMENTS = [
+      { key: 'modafinil', label: 'Modafinil' },
+      { key: 'methyleneBlue', label: 'Methylene Blue' },
+      { key: 'lTheanine', label: 'L-Theanine' }
+    ];
+
+    const NIGHTTIME_SUPPLEMENTS = [
+      { key: 'magnesium', label: 'Magnesium' },
+      { key: 'zinc', label: 'Zinc' },
+      { key: 'endep', label: 'Endep' },
+      { key: 'restavit', label: 'Restavit' }
+    ];
+
+    const ALL_SUPPLEMENTS = [...DAYTIME_SUPPLEMENTS, ...NIGHTTIME_SUPPLEMENTS];
+
+    const DRINK_ITEMS = [
+      { key: 'plainWater', label: 'Plain Water', color: '#0EA5E9' },
+      { key: 'sparklingWater', label: 'Sparkling Water', color: '#38BDF8' },
+      { key: 'heartSaltPinkSalt', label: 'Heart Salt + Pink Salt', color: '#E5A04E' },
+      { key: 'ketoneEsters', label: 'Ketone Esters', color: '#7C3AED' },
+      { key: 'mctOil', label: 'MCT Oil', color: '#059669' },
+      { key: 'boneBrothSaint', label: 'Bone Broth — Saint', color: '#B85450' },
+      { key: 'boneBrothHome', label: 'Bone Broth — Home', color: '#D4736F' },
+      { key: 'soloLemonOrange', label: 'Solo Lemon Orange', color: '#F59E0B' }
+    ];
+
+    // ============ UTILITY FUNCTIONS ============
+    const getTodayKey = () => {
+      const now = new Date();
+      return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    };
+
+    const getCaffeineMg = (data) => data ? (data.coffee || 0) * 90 + (data.caffeineGum || 0) * 30 : 0;
+    const getNicotineMg = (data) => data ? (data.nicotineGum || 0) * 2 : 0;
+
+    const isEarlyWakeCheck = (wakeUpTime) => {
+      if (!wakeUpTime) return false;
+      const match = wakeUpTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+      if (match) {
+        const hour = parseInt(match[1]);
+        const minutes = parseInt(match[2]);
+        const period = match[3].toUpperCase();
+        if (period === 'AM') {
+          if (hour === 4 && minutes >= 30) return true;
+          if (hour === 5 && minutes <= 30) return true;
+        }
+      }
+      return false;
+    };
+
+    const getCurrentMonthDays = () => {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      const today = now.getDate();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const days = [];
+      for (let d = 1; d <= daysInMonth; d++) {
+        const key = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+        days.push({ key, dateLabel: d, isToday: d === today, isPast: d < today, isFuture: d > today, dayOfWeek: new Date(year, month, d).getDay() });
+      }
+      return days;
+    };
+
+    const getCalendarWeeks = () => {
+      const days = getCurrentMonthDays();
+      const firstDayOfWeek = days[0].dayOfWeek;
+      const weeks = [];
+      let currentWeek = Array(firstDayOfWeek).fill(null);
+      days.forEach(day => {
+        currentWeek.push(day);
+        if (currentWeek.length === 7) { weeks.push(currentWeek); currentWeek = []; }
+      });
+      if (currentWeek.length > 0) { while (currentWeek.length < 7) currentWeek.push(null); weeks.push(currentWeek); }
+      return weeks;
+    };
+
+    // ============ CUSTOM HOOK ============
+    const useTrackerData = () => {
+      const [history, setHistory] = useState({});
+      const [selectedDate, setSelectedDate] = useState(getTodayKey());
+      const [showResetConfirm, setShowResetConfirm] = useState(false);
+      const [pendingWakeTime, setPendingWakeTime] = useState('');
+      const [isRefreshing, setIsRefreshing] = useState(false);
+
+      const todayKey = getTodayKey();
+      const selectedData = history[selectedDate] || EMPTY_DAY;
+      const totalCaffeine = getCaffeineMg(selectedData);
+      const isToday = selectedDate === todayKey;
+
+      // ---- IndexedDB helpers ----
+      const openIDB = () => new Promise((resolve, reject) => {
+        const request = indexedDB.open(IDB_NAME, 1);
+        request.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('history')) {
+            db.createObjectStore('history', { keyPath: 'id' });
+          }
+        };
+        request.onsuccess = (e) => resolve(e.target.result);
+        request.onerror = (e) => reject(e);
+      });
+
+      const saveToIDB = async (data) => {
+        try {
+          const db = await openIDB();
+          const tx = db.transaction('history', 'readwrite');
+          tx.objectStore('history').put({ id: 'data', history: data });
+        } catch (err) {
+          localStorage.setItem(LS_KEY, JSON.stringify(data));
+        }
+      };
+
+      const loadFromIDB = () => new Promise(async (resolve) => {
+        try {
+          const db = await openIDB();
+          const tx = db.transaction('history', 'readonly');
+          const req = tx.objectStore('history').get('data');
+          req.onsuccess = () => resolve(req.result ? req.result.history : null);
+          req.onerror = () => resolve(null);
+        } catch {
+          const saved = localStorage.getItem(LS_KEY);
+          resolve(saved ? JSON.parse(saved) : null);
+        }
+      });
+
+      // ---- Load from Supabase (source of truth), fallback to local ----
+      useEffect(() => {
+        const loadData = async () => {
+          try {
+            const { data, error } = await supabase.from(DB_TABLE).select('*');
+            if (!error && data) {
+              const historyObj = {};
+              data.forEach(entry => { historyObj[entry.date] = entry.data; });
+              setHistory(historyObj);
+              saveToIDB(historyObj);
+              return;
+            }
+          } catch (err) {
+            console.log('Supabase load failed, trying offline cache:', err);
+          }
+          const cached = await loadFromIDB();
+          if (cached) setHistory(cached);
+        };
+        loadData();
+      }, []);
+
+      // ---- Pull-to-refresh: reload from Supabase ----
+      const refreshData = useCallback(async () => {
+        setIsRefreshing(true);
+        try {
+          const { data, error } = await supabase.from(DB_TABLE).select('*');
+          if (!error && data) {
+            const historyObj = {};
+            data.forEach(entry => { historyObj[entry.date] = entry.data; });
+            setHistory(historyObj);
+            saveToIDB(historyObj);
+          }
+        } catch (err) {
+          console.log('Refresh failed:', err);
+        }
+        setIsRefreshing(false);
+      }, []);
+
+      // ---- Save to Supabase + local on every change ----
+      useEffect(() => {
+        if (Object.keys(history).length === 0) return;
+        const saveData = async () => {
+          try {
+            for (const [date, data] of Object.entries(history)) {
+              await supabase.from(DB_TABLE).upsert({
+                id: date,
+                date: date,
+                data: data,
+                updated_at: new Date().toISOString()
+              });
+            }
+          } catch (err) {
+            console.log('Supabase save failed:', err);
+          }
+          saveToIDB(history);
+        };
+        saveData();
+      }, [history]);
+
+      // ---- Actions ----
+      const recordWakeUp = () => {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        setHistory(prev => ({ ...prev, [selectedDate]: { ...(prev[selectedDate] || EMPTY_DAY), wakeUpTime: timeStr } }));
+      };
+
+      const setManualWakeTime = (timeStr) => {
+        if (!timeStr) return;
+        const [hours, minutes] = timeStr.split(':');
+        const hour = parseInt(hours);
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const hour12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+        const formattedTime = hour12 + ':' + minutes + ' ' + ampm;
+        setHistory(prev => ({ ...prev, [selectedDate]: { ...(prev[selectedDate] || EMPTY_DAY), wakeUpTime: formattedTime } }));
+        setPendingWakeTime('');
+      };
+
+      const clearWakeTime = () => {
+        setHistory(prev => ({ ...prev, [selectedDate]: { ...(prev[selectedDate] || EMPTY_DAY), wakeUpTime: null } }));
+      };
+
+      const addCount = (key, step = 1) => {
+        setHistory(prev => ({ ...prev, [selectedDate]: { ...(prev[selectedDate] || EMPTY_DAY), [key]: ((prev[selectedDate] && prev[selectedDate][key]) || 0) + step } }));
+      };
+
+      const removeCount = (key, step = 1) => {
+        setHistory(prev => ({ ...prev, [selectedDate]: { ...(prev[selectedDate] || EMPTY_DAY), [key]: Math.max(0, ((prev[selectedDate] && prev[selectedDate][key]) || 0) - step) } }));
+      };
+
+      const toggleSupplement = (key) => {
+        setHistory(prev => {
+          const current = prev[selectedDate] || EMPTY_DAY;
+          return { ...prev, [selectedDate]: { ...current, [key]: !current[key] } };
+        });
+      };
+
+      const resetDay = async () => {
+        try {
+          await supabase.from(DB_TABLE).delete().eq('id', selectedDate);
+        } catch (err) {
+          console.log('Supabase delete failed:', err);
+        }
+        setHistory(prev => {
+          const newHistory = { ...prev };
+          delete newHistory[selectedDate];
+          saveToIDB(newHistory);
+          return newHistory;
+        });
+        setShowResetConfirm(false);
+      };
+
+      const goToPrevDay = () => {
+        const d = new Date(selectedDate + 'T12:00:00');
+        d.setDate(d.getDate() - 1);
+        setSelectedDate(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
+      };
+
+      const goToNextDay = () => {
+        const d = new Date(selectedDate + 'T12:00:00');
+        d.setDate(d.getDate() + 1);
+        setSelectedDate(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
+      };
+
+      const goToToday = () => setSelectedDate(todayKey);
+
+      const formatSelectedDate = () => {
+        const date = new Date(selectedDate + 'T12:00:00');
+        const day = date.getDate();
+        const suffix = (day === 1 || day === 21 || day === 31) ? 'st' : (day === 2 || day === 22) ? 'nd' : (day === 3 || day === 23) ? 'rd' : 'th';
+        const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
+        const month = date.toLocaleDateString('en-US', { month: 'long' });
+        return weekday + ', ' + day + suffix + ' ' + month;
+      };
+
+      return {
+        state: { history, selectedDate, showResetConfirm, pendingWakeTime, isRefreshing },
+        actions: { setSelectedDate, setShowResetConfirm, setPendingWakeTime, recordWakeUp, setManualWakeTime, clearWakeTime, addCount, removeCount, toggleSupplement, resetDay, goToPrevDay, goToNextDay, goToToday, refreshData },
+        computed: { todayKey, selectedData, totalCaffeine, isToday, formatSelectedDate }
+      };
+    };
+
+    // ============ MAIN APP ============
+    const StimulantTracker = () => {
+      const { state, actions, computed } = useTrackerData();
+      const { history, selectedDate, showResetConfirm, pendingWakeTime, isRefreshing } = state;
+      const { setSelectedDate, setShowResetConfirm, setPendingWakeTime, recordWakeUp, setManualWakeTime, clearWakeTime, addCount, removeCount, toggleSupplement, resetDay, goToPrevDay, goToNextDay, goToToday, refreshData } = actions;
+      const { todayKey, selectedData, totalCaffeine, isToday, formatSelectedDate } = computed;
+
+      const calendarWeeks = getCalendarWeeks();
+      const currentMonthName = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+      // ---- Pull-to-refresh touch handling ----
+      const [pullDistance, setPullDistance] = useState(0);
+      const touchStartY = useRef(0);
+      const isPulling = useRef(false);
+      const PULL_THRESHOLD = 80;
+
+      const handleTouchStart = (e) => {
+        if (window.scrollY === 0) {
+          touchStartY.current = e.touches[0].clientY;
+          isPulling.current = true;
+        }
+      };
+
+      const handleTouchMove = (e) => {
+        if (!isPulling.current) return;
+        const diff = e.touches[0].clientY - touchStartY.current;
+        if (diff > 0 && window.scrollY === 0) {
+          setPullDistance(Math.min(diff * 0.5, 120));
+        }
+      };
+
+      const handleTouchEnd = () => {
+        if (pullDistance >= PULL_THRESHOLD && !isRefreshing) {
+          refreshData();
+        }
+        setPullDistance(0);
+        isPulling.current = false;
+      };
+
+      return (
+        <div style={{ maxWidth: '500px', margin: '0 auto' }} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
+
+          {/* ---- Pull-to-refresh indicator ---- */}
+          {(pullDistance > 0 || isRefreshing) && (
+            <div style={{
+              display: 'flex', justifyContent: 'center', alignItems: 'center',
+              height: isRefreshing ? '40px' : pullDistance + 'px',
+              overflow: 'hidden', transition: pullDistance === 0 ? 'height 0.3s ease' : 'none'
+            }}>
+              <div style={{
+                fontSize: '11px', fontWeight: 600,
+                color: pullDistance >= PULL_THRESHOLD || isRefreshing ? '#4A90A4' : '#9ca3af',
+                display: 'flex', alignItems: 'center', gap: '6px'
+              }}>
+                <span style={{
+                  display: 'inline-block',
+                  transform: pullDistance >= PULL_THRESHOLD ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.2s ease',
+                  animation: isRefreshing ? 'spin 1s linear infinite' : 'none'
+                }}>{isRefreshing ? '↻' : '↓'}</span>
+                {isRefreshing ? 'Refreshing...' : pullDistance >= PULL_THRESHOLD ? 'Release to refresh' : 'Pull to refresh'}
+              </div>
+            </div>
+          )}
+
+          {/* ---- Header ---- */}
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 249, 250, 0.9) 100%)',
+            backdropFilter: 'blur(20px)',
+            border: '1px solid rgba(255, 255, 255, 0.3)',
+            borderRadius: '0 0 24px 24px',
+            padding: '24px 20px 20px',
+            marginBottom: '20px',
+            marginLeft: '-16px',
+            marginRight: '-16px',
+            marginTop: '-16px',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04)',
+            textAlign: 'center'
+          }}>
+            <div style={{
+              fontFamily: 'Poppins, sans-serif',
+              fontWeight: 700,
+              fontSize: '28px',
+              color: '#000000',
+              letterSpacing: '-0.5px',
+              marginBottom: '4px'
+            }}>Ro's Stimulant Tracker</div>
+            <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 500, letterSpacing: '0.3px' }}>Daily PPP tracking</div>
+          </div>
+
+          {/* ---- Date + Wake Up (combined) ---- */}
+          <div style={styles.card}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <button style={{ ...styles.btn, padding: '6px 10px', fontSize: '12px' }} onClick={goToPrevDay}>←</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: '#374151' }}>
+                  {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                </span>
+                <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} style={{ border: '1px solid #e5e7eb', borderRadius: '6px', background: '#f9fafb', fontSize: '11px', padding: '3px 6px', color: '#374151', cursor: 'pointer' }} />
+                {!isToday && <button onClick={goToToday} style={{ background: '#4A90A4', color: '#fff', border: 'none', borderRadius: '4px', padding: '3px 8px', fontSize: '10px', cursor: 'pointer', fontWeight: 600 }}>Today</button>}
+              </div>
+              <button style={{ ...styles.btn, padding: '6px 10px', fontSize: '12px' }} onClick={goToNextDay}>→</button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #f3f4f6', paddingTop: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '16px' }}>☀️</span>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#374151' }}>Wake Up</span>
+              </div>
+              {selectedData.wakeUpTime ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '18px', fontWeight: 700, color: '#4A90A4' }}>{selectedData.wakeUpTime}</span>
+                  <button style={{ ...styles.btn, padding: '3px 6px', fontSize: '9px' }} onClick={clearWakeTime}>✕</button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <input type="time" value={pendingWakeTime} onChange={(e) => setPendingWakeTime(e.target.value)} style={{ border: '1px solid #e5e7eb', borderRadius: '5px', background: '#f9fafb', fontSize: '11px', padding: '3px 6px', color: '#374151', cursor: 'pointer', width: '90px' }} />
+                  {pendingWakeTime && <button style={{ ...styles.btn, padding: '4px 8px', fontSize: '9px', background: '#4A90A4', color: '#fff', border: 'none' }} onClick={() => setManualWakeTime(pendingWakeTime)}>Set</button>}
+                  <span style={{ fontSize: '10px', color: '#9ca3af' }}>or</span>
+                  <button style={{ ...styles.btn, padding: '4px 8px', fontSize: '9px' }} onClick={recordWakeUp}>Now</button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ---- Two-Column: Stimulant Stack (L) + Performance Stack (R) ---- */}
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
+            {/* LEFT — Stimulant Stack */}
+            <div style={{ ...styles.card, flex: 1, marginBottom: 0, padding: '12px' }}>
+              <div style={{ fontSize: '10px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Stimulant Stack</div>
+              {STIMULANT_ITEMS.map((item, idx) => {
+                const count = selectedData[item.key] || 0;
+                const step = item.step || 1;
+                return (
+                  <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 0', borderTop: idx > 0 ? '1px solid #f3f4f6' : 'none' }}>
+                    <div style={{ width: '6px', height: '6px', borderRadius: '2px', background: item.color, flexShrink: 0 }} />
+                    <span style={{ fontSize: '10px', fontWeight: 500, color: '#374151', flex: 1, whiteSpace: 'nowrap' }}>{item.label}</span>
+                    <button style={{ width: '22px', height: '20px', border: '1px solid #e5e7eb', borderRadius: '4px', background: '#f9fafb', fontSize: '12px', fontWeight: 700, cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1 }} onClick={() => removeCount(item.key, step)}>−</button>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: count > 0 ? item.color : '#d1d5db', minWidth: '16px', textAlign: 'center' }}>{count % 1 !== 0 ? count.toFixed(1) : count}</span>
+                    <button style={{ width: '22px', height: '20px', border: '1px solid #e5e7eb', borderRadius: '4px', background: '#f9fafb', fontSize: '12px', fontWeight: 700, cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1 }} onClick={() => addCount(item.key, step)}>+</button>
+                  </div>
+                );
+              })}
+              {/* Totals */}
+              <div style={{ borderTop: '1px solid #e5e7eb', marginTop: '6px', paddingTop: '6px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '9px', color: '#6b7280' }}>Caffeine</span>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#5588BB' }}>{totalCaffeine}mg</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '9px', color: '#6b7280' }}>Nicotine</span>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#B85450' }}>{getNicotineMg(selectedData)}mg</span>
+                </div>
+              </div>
+              {/* Pain Killers */}
+              <div style={{ borderTop: '1px solid #e5e7eb', marginTop: '8px', paddingTop: '8px' }}>
+                <div style={{ fontSize: '10px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Pain Killers</div>
+                {PAINKILLER_ITEMS.map((item, idx) => {
+                  const count = selectedData[item.key] || 0;
+                  return (
+                    <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 0', borderTop: idx > 0 ? '1px solid #f3f4f6' : 'none' }}>
+                      <div style={{ width: '6px', height: '6px', borderRadius: '2px', background: item.color, flexShrink: 0 }} />
+                      <span style={{ fontSize: '10px', fontWeight: 500, color: '#374151', flex: 1, whiteSpace: 'nowrap' }}>{item.label}</span>
+                      <button style={{ width: '22px', height: '20px', border: '1px solid #e5e7eb', borderRadius: '4px', background: '#f9fafb', fontSize: '12px', fontWeight: 700, cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1 }} onClick={() => removeCount(item.key)}>−</button>
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: count > 0 ? item.color : '#d1d5db', minWidth: '16px', textAlign: 'center' }}>{count}</span>
+                      <button style={{ width: '22px', height: '20px', border: '1px solid #e5e7eb', borderRadius: '4px', background: '#f9fafb', fontSize: '12px', fontWeight: 700, cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1 }} onClick={() => addCount(item.key)}>+</button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            {/* RIGHT — Performance Stack */}
+            <div style={{ ...styles.card, flex: 1, marginBottom: 0, padding: '12px' }}>
+              <div style={{ fontSize: '10px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Performance Stack</div>
+              {/* Daytime */}
+              <div style={{ fontSize: '9px', fontWeight: 600, color: '#D4AA44', textTransform: 'uppercase', letterSpacing: '0.3px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span>☀️</span> Daytime
+              </div>
+              {DAYTIME_SUPPLEMENTS.map((item, idx) => {
+                const checked = selectedData[item.key] || false;
+                return (
+                  <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 0', borderTop: idx > 0 ? '1px solid #f3f4f6' : 'none', cursor: 'pointer' }} onClick={() => toggleSupplement(item.key)}>
+                    <div style={{
+                      width: '14px', height: '14px', borderRadius: '3px', flexShrink: 0,
+                      border: checked ? '2px solid #4A90A4' : '2px solid #d1d5db',
+                      background: checked ? '#4A90A4' : '#fff',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      transition: 'all 0.15s ease'
+                    }}>
+                      {checked && <span style={{ color: '#fff', fontSize: '9px', fontWeight: 700, lineHeight: 1 }}>✓</span>}
+                    </div>
+                    <span style={{ fontSize: '10px', color: checked ? '#9ca3af' : '#374151', fontWeight: 500, textDecoration: checked ? 'line-through' : 'none' }}>{item.label}</span>
+                  </div>
+                );
+              })}
+              {/* Nighttime */}
+              <div style={{ fontSize: '9px', fontWeight: 600, color: '#6366F1', textTransform: 'uppercase', letterSpacing: '0.3px', marginTop: '8px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span>🌙</span> Nighttime
+              </div>
+              {NIGHTTIME_SUPPLEMENTS.map((item, idx) => {
+                const checked = selectedData[item.key] || false;
+                return (
+                  <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 0', borderTop: idx > 0 ? '1px solid #f3f4f6' : 'none', cursor: 'pointer' }} onClick={() => toggleSupplement(item.key)}>
+                    <div style={{
+                      width: '14px', height: '14px', borderRadius: '3px', flexShrink: 0,
+                      border: checked ? '2px solid #6366F1' : '2px solid #d1d5db',
+                      background: checked ? '#6366F1' : '#fff',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      transition: 'all 0.15s ease'
+                    }}>
+                      {checked && <span style={{ color: '#fff', fontSize: '9px', fontWeight: 700, lineHeight: 1 }}>✓</span>}
+                    </div>
+                    <span style={{ fontSize: '10px', color: checked ? '#9ca3af' : '#374151', fontWeight: 500, textDecoration: checked ? 'line-through' : 'none' }}>{item.label}</span>
+                  </div>
+                );
+              })}
+              <div style={{ borderTop: '1px solid #e5e7eb', marginTop: '6px', paddingTop: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '9px', color: '#6b7280' }}>Taken</span>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#4A90A4' }}>{ALL_SUPPLEMENTS.filter(s => selectedData[s.key]).length}/{ALL_SUPPLEMENTS.length}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* ---- Drinks ---- */}
+          <div style={styles.card}>
+            <div style={{ fontSize: '10px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Drinks</div>
+            {DRINK_ITEMS.map((item, idx) => {
+              const count = selectedData[item.key] || 0;
+              return (
+                <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 0', borderTop: idx > 0 ? '1px solid #f3f4f6' : 'none' }}>
+                  <div style={{ width: '6px', height: '6px', borderRadius: '2px', background: item.color, flexShrink: 0 }} />
+                  <span style={{ fontSize: '10px', fontWeight: 500, color: '#374151', flex: 1 }}>{item.label}</span>
+                  <button style={{ width: '22px', height: '20px', border: '1px solid #e5e7eb', borderRadius: '4px', background: '#f9fafb', fontSize: '12px', fontWeight: 700, cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1 }} onClick={() => removeCount(item.key)}>−</button>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: count > 0 ? item.color : '#d1d5db', minWidth: '16px', textAlign: 'center' }}>{count}</span>
+                  <button style={{ width: '22px', height: '20px', border: '1px solid #e5e7eb', borderRadius: '4px', background: '#f9fafb', fontSize: '12px', fontWeight: 700, cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1 }} onClick={() => addCount(item.key)}>+</button>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ---- Calendar View ---- */}
+          <div style={styles.card}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div style={{ fontWeight: 700, fontSize: '14px', color: '#111827' }}>Calendar View</div>
+              <div style={{ fontSize: '11px', color: '#6b7280' }}>{currentMonthName}</div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '8px' }}>
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                <div key={d} style={{ fontSize: '9px', fontWeight: 600, color: '#9ca3af', textAlign: 'center', padding: '4px 0' }}>{d}</div>
+              ))}
+            </div>
+            {calendarWeeks.map((week, weekIdx) => (
+              <div key={weekIdx} style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '4px' }}>
+                {week.map((day, dayIdx) => {
+                  if (!day) return <div key={dayIdx} style={{ height: '56px' }} />;
+                  const dayData = history[day.key];
+                  const hasWakeUp = dayData && dayData.wakeUpTime;
+                  const isSelected = day.key === selectedDate;
+                  const dayCaff = getCaffeineMg(dayData);
+                  const dayNic = getNicotineMg(dayData);
+                  const isEarlyWake = isEarlyWakeCheck(dayData ? dayData.wakeUpTime : null);
+                  const isLateWake = hasWakeUp && !isEarlyWake;
+                  const hasAnyData = hasWakeUp || dayCaff > 0 || dayNic > 0;
+
+                  let bgColor = '#fff';
+                  if (isSelected) bgColor = '#EBF5FF';
+                  else if (isEarlyWake) bgColor = '#DCFCE7';
+                  else if (isLateWake) bgColor = '#FEF2F2';
+                  else if (hasAnyData) bgColor = '#f9fafb';
+
+                  return (
+                    <div key={day.key} style={{
+                      height: '56px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      borderRadius: '6px',
+                      background: bgColor,
+                      border: isSelected ? '2px solid #4A90A4' : '1px solid #e5e7eb',
+                      padding: '3px 4px',
+                      overflow: 'hidden',
+                      cursor: 'pointer'
+                    }} onClick={() => setSelectedDate(day.key)}>
+                      <div style={{ fontSize: '12px', fontWeight: isSelected ? 700 : 500, color: day.isFuture ? '#d1d5db' : (isSelected ? '#4A90A4' : '#374151'), lineHeight: 1 }}>{day.dateLabel}</div>
+                      {hasWakeUp && <div style={{ fontSize: '8px', color: '#4A90A4', fontWeight: 600, lineHeight: 1, marginTop: '2px' }}>{dayData.wakeUpTime}</div>}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', marginTop: 'auto', marginBottom: '1px' }}>
+                        {dayCaff > 0 && <span style={{ fontSize: '7px', color: '#5588BB', fontWeight: 700, lineHeight: 1 }}>{dayCaff}mg</span>}
+                        {dayNic > 0 && <span style={{ fontSize: '7px', color: '#B85450', fontWeight: 700, lineHeight: 1 }}>{dayNic}mg</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #e5e7eb' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#DCFCE7', border: '1px solid #86EFAC' }} />
+                <span style={{ fontSize: '9px', color: '#6b7280' }}>Early Wake (4:30-5:30 AM)</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#FEF2F2', border: '1px solid #FECACA' }} />
+                <span style={{ fontSize: '9px', color: '#6b7280' }}>Late Wake (&gt;5:30 AM)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* ---- Stacked Bar Chart ---- */}
+          {(() => {
+            const chartDays = getCurrentMonthDays();
+            const maxCount = Math.max(...chartDays.map(day => {
+              const d = history[day.key];
+              return d ? (d.coffee || 0) + (d.caffeineGum || 0) + (d.nicotineGum || 0) : 0;
+            }), 4);
+            const chartHeight = 140;
+            const gridStep = maxCount <= 8 ? 2 : maxCount <= 16 ? 4 : 5;
+            const gridLines = [];
+            for (let i = gridStep; i <= maxCount; i += gridStep) gridLines.push(i);
+            return (
+              <div style={styles.card}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <div style={{ fontWeight: 700, fontSize: '14px', color: '#111827' }}>Daily Intake</div>
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    {STIMULANT_ITEMS.map(item => (
+                      <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <div style={{ width: '10px', height: '10px', borderRadius: '3px', background: item.color }} />
+                        <span style={{ fontSize: '9px', color: '#6b7280' }}>{item.label.split(' ')[0]}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ paddingLeft: '24px', position: 'relative' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', height: chartHeight + 'px', gap: '1px', background: '#fafafa', borderRadius: '8px', padding: '8px 4px 0', position: 'relative', borderBottom: '1px solid #e5e7eb' }}>
+                    {gridLines.map(val => (
+                      <div key={val} style={{ position: 'absolute', left: 0, right: 0, bottom: ((val / maxCount) * 100) + '%', borderTop: '1px dashed #e5e7eb', pointerEvents: 'none', zIndex: 0 }}>
+                        <span style={{ position: 'absolute', left: '-22px', top: '-6px', fontSize: '8px', color: '#9ca3af' }}>{val}</span>
+                      </div>
+                    ))}
+                    {chartDays.map((day) => {
+                      const d = history[day.key];
+                      const coffee = d ? d.coffee || 0 : 0;
+                      const cafGum = d ? d.caffeineGum || 0 : 0;
+                      const nic = d ? d.nicotineGum || 0 : 0;
+                      const total = coffee + cafGum + nic;
+                      const barH = total > 0 ? Math.max(4, (total / maxCount) * (chartHeight - 16)) : 0;
+                      const isSelected = day.key === selectedDate;
+                      return (
+                        <div key={day.key} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', cursor: 'pointer', zIndex: 1 }} onClick={() => setSelectedDate(day.key)}>
+                          {total > 0 && <div style={{ fontSize: '6px', color: '#9ca3af', marginBottom: '2px' }}>{total}</div>}
+                          <div style={{
+                            width: '100%',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            borderRadius: '3px 3px 0 0',
+                            overflow: 'hidden',
+                            minHeight: '2px',
+                            border: isSelected ? '1px solid #fff' : 'none',
+                            borderBottom: 'none',
+                            boxShadow: isSelected ? '0 0 0 1.5px #4A90A4' : 'none'
+                          }}>
+                            {nic > 0 && <div style={{ height: (nic / maxCount) * (chartHeight - 16) + 'px', background: '#B85450' }} />}
+                            {cafGum > 0 && <div style={{ height: (cafGum / maxCount) * (chartHeight - 16) + 'px', background: '#D4AA44' }} />}
+                            {coffee > 0 && <div style={{ height: (coffee / maxCount) * (chartHeight - 16) + 'px', background: '#5588BB' }} />}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display: 'flex', padding: '6px 4px 0', gap: '1px' }}>
+                    {chartDays.map((day) => {
+                      const isSelected = day.key === selectedDate;
+                      return <div key={day.key} style={{ flex: 1, textAlign: 'center', fontSize: '7px', cursor: 'pointer', fontWeight: isSelected ? 700 : 400, color: isSelected ? '#4A90A4' : '#9ca3af' }} onClick={() => setSelectedDate(day.key)}>{day.dateLabel}</div>;
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ---- Reset Day ---- */}
+          <div style={styles.card}>
+            <div style={{ fontWeight: 700, fontSize: '14px', color: '#111827', marginBottom: '12px' }}>Data</div>
+            {!showResetConfirm ? (
+              <button style={{ ...styles.btn, width: '100%', padding: '12px 8px', fontSize: '11px', textAlign: 'center' }} onClick={() => setShowResetConfirm(true)}>🗑️ Reset Day's Data</button>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', padding: '8px', background: '#FEF2F2', borderRadius: '6px' }}>
+                <span style={{ fontSize: '11px', color: '#DC2626' }}>Reset {formatSelectedDate()}?</span>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button style={{ ...styles.btn, padding: '6px 12px', fontSize: '10px', background: '#DC2626', color: '#fff', border: 'none' }} onClick={resetDay}>Yes</button>
+                  <button style={{ ...styles.btn, padding: '6px 12px', fontSize: '10px' }} onClick={() => setShowResetConfirm(false)}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ---- Footer ---- */}
+          <div style={{ textAlign: 'center', padding: '16px 0 8px', color: '#9ca3af', fontSize: '10px' }}>Track. Manage. Optimize. 💪</div>
+        </div>
+      );
+    };
+
+    // ============ RENDER ============
+    ReactDOM.createRoot(document.getElementById('app')).render(<StimulantTracker />);
+  </script>
+</body>
+</html>

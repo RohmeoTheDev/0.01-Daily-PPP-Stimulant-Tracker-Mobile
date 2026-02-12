@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>Ro's Daily Tracker</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+      color: #1a1a1a;
+      min-height: 100vh;
+      padding: 0;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: max(32px, env(safe-area-inset-bottom));
+    }
+    #app { max-width: 500px; margin: 0 auto; padding: 0 16px 16px; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const ProductivityTracker = () => {
+      const getTodayKey = () => {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        return year + '-' + month + '-' + day;
+      };
+      
+      const [history, setHistory] = useState({});
+      const [selectedDate, setSelectedDate] = useState(getTodayKey());
+      const [showResetConfirm, setShowResetConfirm] = useState(false);
+      const [importStatus, setImportStatus] = useState(null);
+      const [pendingWakeTime, setPendingWakeTime] = useState('');
+      const fileInputRef = useRef(null);
+
+      const todayKey = getTodayKey();
+      const emptyDay = { 
+        wakeUpTime: null, admin: 0, focus: 0, selfCare: 0, audiobook: 0, business: 0, cardio: 0, gym: 0, stretching: 0, meditation: 0, walking: 0, coffee: 0, caffeineGum: 0, water: 0,
+        dailyChecks: { daily1: false, daily2: false, daily3: false, daily4: false, daily5: false },
+        nightlyChecks: { nightly1: false, nightly2: false, nightly3: false, nightly4: false, nightly5: false }
+      };
+      const selectedData = history[selectedDate] || emptyDay;
+      const totalCaffeine = (selectedData.coffee * 90) + (selectedData.caffeineGum * 30);
+      const totalWater = selectedData.water || 0;
+      const isToday = selectedDate === todayKey;
+
+      const dailyItems = [
+        { key: 'daily1', label: 'Water' },
+        { key: 'daily2', label: 'Gratitude' },
+        { key: 'daily3', label: 'Coffee' }
+      ];
+
+      const nightlyItems = [
+        { key: 'nightly1', label: 'Stretch' },
+        { key: 'nightly2', label: 'Endep' },
+        { key: 'nightly3', label: 'Melatonin' },
+        { key: 'nightly4', label: 'Zinc & Magnesium' }
+      ];
+
+      useEffect(() => {
+        const loadData = async () => {
+          try {
+            const request = indexedDB.open('RoTrackerDB', 1);
+            request.onupgradeneeded = (e) => {
+              const db = e.target.result;
+              if (!db.objectStoreNames.contains('history')) {
+                db.createObjectStore('history', { keyPath: 'id' });
+              }
+            };
+            request.onsuccess = (e) => {
+              const db = e.target.result;
+              const tx = db.transaction('history', 'readonly');
+              const store = tx.objectStore('history');
+              const getReq = store.get('data');
+              getReq.onsuccess = () => {
+                if (getReq.result && getReq.result.history) {
+                  setHistory(getReq.result.history);
+                }
+              };
+            };
+          } catch (err) {
+            const saved = localStorage.getItem('roTrackerHistory');
+            if (saved) setHistory(JSON.parse(saved));
+          }
+        };
+        loadData();
+      }, []);
+
+      useEffect(() => {
+        if (Object.keys(history).length === 0) return;
+        try {
+          const request = indexedDB.open('RoTrackerDB', 1);
+          request.onsuccess = (e) => {
+            const db = e.target.result;
+            const tx = db.transaction('history', 'readwrite');
+            const store = tx.objectStore('history');
+            store.put({ id: 'data', history });
+          };
+        } catch (err) {
+          localStorage.setItem('roTrackerHistory', JSON.stringify(history));
+        }
+      }, [history]);
+
+      const categories = [
+        { key: 'admin', label: 'Admin', color: '#B85450' },
+        { key: 'selfCare', label: 'Self Care', color: '#8B4545' },
+        { key: 'meditation', label: 'Meditation', color: '#B08080' },
+        { key: 'audiobook', label: 'Audiobook', color: '#C4915C' },
+        { key: 'focus', label: 'Focus', color: '#D4AA44' },
+        { key: 'business', label: 'Business', color: '#9090B0' },
+        { key: 'walking', label: 'Walking', color: '#7EB6E6' },
+        { key: 'cardio', label: 'Cardio', color: '#5588BB' },
+        { key: 'gym', label: 'Gym', color: '#4A5588' },
+        { key: 'stretching', label: 'Stretching', color: '#2A2A50' }
+      ];
+
+      const leftCategories = categories.slice(0, 5);
+      const rightCategories = categories.slice(5, 10);
+
+      const recordWakeUp = () => {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        setHistory(prev => ({ ...prev, [selectedDate]: { ...(prev[selectedDate] || emptyDay), wakeUpTime: timeStr } }));
+      };
+
+      const setManualWakeTime = (timeStr) => {
+        if (!timeStr) return;
+        const [hours, minutes] = timeStr.split(':');
+        const hour = parseInt(hours);
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const hour12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+        const formattedTime = hour12 + ':' + minutes + ' ' + ampm;
+        setHistory(prev => ({ ...prev, [selectedDate]: { ...(prev[selectedDate] || emptyDay), wakeUpTime: formattedTime } }));
+        setPendingWakeTime('');
+      };
+
+      const addTime = (category, minutes) => {
+        setHistory(prev => ({ ...prev, [selectedDate]: { ...(prev[selectedDate] || emptyDay), [category]: ((prev[selectedDate] && prev[selectedDate][category]) || 0) + minutes } }));
+      };
+
+      const subtractTime = (category, minutes) => {
+        setHistory(prev => ({ ...prev, [selectedDate]: { ...(prev[selectedDate] || emptyDay), [category]: Math.max(0, ((prev[selectedDate] && prev[selectedDate][category]) || 0) - minutes) } }));
+      };
+
+      const addCount = (category) => {
+        setHistory(prev => ({ ...prev, [selectedDate]: { ...(prev[selectedDate] || emptyDay), [category]: ((prev[selectedDate] && prev[selectedDate][category]) || 0) + 1 } }));
+      };
+
+      const removeCount = (category) => {
+        setHistory(prev => ({ ...prev, [selectedDate]: { ...(prev[selectedDate] || emptyDay), [category]: Math.max(0, ((prev[selectedDate] && prev[selectedDate][category]) || 0) - 1) } }));
+      };
+
+      const addWater = (amount) => {
+        setHistory(prev => ({ ...prev, [selectedDate]: { ...(prev[selectedDate] || emptyDay), water: Math.round((((prev[selectedDate] && prev[selectedDate].water) || 0) + amount) * 100) / 100 } }));
+      };
+
+      const removeWater = (amount) => {
+        setHistory(prev => ({ ...prev, [selectedDate]: { ...(prev[selectedDate] || emptyDay), water: Math.max(0, Math.round((((prev[selectedDate] && prev[selectedDate].water) || 0) - amount) * 100) / 100) } }));
+      };
+
+      const toggleDailyCheck = (checkKey) => {
+        setHistory(prev => {
+          const currentDay = prev[selectedDate] || emptyDay;
+          const currentChecks = currentDay.dailyChecks || { daily1: false, daily2: false, daily3: false, daily4: false, daily5: false };
+          return { 
+            ...prev, 
+            [selectedDate]: { 
+              ...currentDay, 
+              dailyChecks: { ...currentChecks, [checkKey]: !currentChecks[checkKey] } 
+            } 
+          };
+        });
+      };
+
+      const toggleNightlyCheck = (checkKey) => {
+        setHistory(prev => {
+          const currentDay = prev[selectedDate] || emptyDay;
+          const currentChecks = currentDay.nightlyChecks || { nightly1: false, nightly2: false, nightly3: false, nightly4: false, nightly5: false };
+          return { 
+            ...prev, 
+            [selectedDate]: { 
+              ...currentDay, 
+              nightlyChecks: { ...currentChecks, [checkKey]: !currentChecks[checkKey] } 
+            } 
+          };
+        });
+      };
+
+      const resetDay = () => {
+        setHistory(prev => { const newHistory = { ...prev }; delete newHistory[selectedDate]; return newHistory; });
+        setShowResetConfirm(false);
+      };
+
+      const formatSelectedDate = () => {
+        const date = new Date(selectedDate + 'T12:00:00');
+        const day = date.getDate();
+        const suffix = (day === 1 || day === 21 || day === 31) ? 'st' : (day === 2 || day === 22) ? 'nd' : (day === 3 || day === 23) ? 'rd' : 'th';
+        const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
+        const month = date.toLocaleDateString('en-US', { month: 'long' });
+        return weekday + ', ' + day + suffix + ' ' + month;
+      };
+
+      const goToPrevDay = () => {
+        const d = new Date(selectedDate + 'T12:00:00');
+        d.setDate(d.getDate() - 1);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        setSelectedDate(year + '-' + month + '-' + day);
+      };
+
+      const goToNextDay = () => {
+        const d = new Date(selectedDate + 'T12:00:00');
+        d.setDate(d.getDate() + 1);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        setSelectedDate(year + '-' + month + '-' + day);
+      };
+
+      const getCurrentMonthDays = () => {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth();
+        const today = now.getDate();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const days = [];
+        for (let d = 1; d <= daysInMonth; d++) {
+          const key = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+          days.push({ key: key, dateLabel: d, isToday: d === today, isPast: d < today, isFuture: d > today, dayOfWeek: new Date(year, month, d).getDay() });
+        }
+        return days;
+      };
+
+      const getTotal = (data) => data ? categories.reduce((sum, cat) => sum + (data[cat.key] || 0), 0) : 0;
+      const getCaffeine = (data) => data ? (data.coffee || 0) * 90 + (data.caffeineGum || 0) * 30 : 0;
+
+      const chartDays = getCurrentMonthDays();
+      const totalSelected = getTotal(selectedData);
+      
+      const maxDataValue = Math.max(...chartDays.map(day => {
+        const dayData = history[day.key];
+        return dayData ? getTotal(dayData) : 0;
+      }), 100);
+      const maxMinutes = Math.ceil(maxDataValue / 100) * 100;
+      
+      const gridLines = [];
+      const step = maxMinutes <= 400 ? 50 : 100;
+      for (let i = step; i <= maxMinutes; i += step) {
+        gridLines.push(i);
+      }
+      
+      const currentMonthName = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+      const exportToExcel = () => {
+        const days = getCurrentMonthDays();
+        let csv = 'Date,Wake Up,Admin,Focus,Audiobook,Self Care,Meditation,Business,Stretching,Cardio,Gym,Walking,Coffee,Caffeine Gum,Water,Total\n';
+        days.forEach(day => {
+          const data = history[day.key] || emptyDay;
+          const total = getTotal(data);
+          csv += [day.key, data.wakeUpTime || '', data.admin || 0, data.focus || 0, data.audiobook || 0, data.selfCare || 0, data.meditation || 0, data.business || 0, data.stretching || 0, data.cardio || 0, data.gym || 0, data.walking || 0, data.coffee || 0, data.caffeineGum || 0, data.water || 0, total].join(',') + '\n';
+        });
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'ro-tracker-' + currentMonthName.replace(' ', '-') + '.csv';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
+
+      const handleImportCSV = (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const lines = e.target.result.split('\n').filter(line => line.trim());
+            if (lines.length < 2) { setImportStatus({ type: 'error', message: 'CSV file is empty or invalid' }); return; }
+            const newHistory = { ...history };
+            let importedCount = 0;
+            for (let i = 1; i < lines.length; i++) {
+              const values = lines[i].split(',');
+              if (values.length < 2) continue;
+              const dateStr = values[0].trim();
+              if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
+              const dayData = {
+                wakeUpTime: values[1] ? values[1].trim() : null,
+                admin: parseInt(values[2]) || 0,
+                focus: parseInt(values[3]) || 0,
+                audiobook: parseInt(values[4]) || 0,
+                selfCare: parseInt(values[5]) || 0,
+                meditation: parseInt(values[6]) || 0,
+                business: parseInt(values[7]) || 0,
+                stretching: parseInt(values[8]) || 0,
+                cardio: parseInt(values[9]) || 0,
+                gym: parseInt(values[10]) || 0,
+                walking: parseInt(values[11]) || 0,
+                coffee: parseInt(values[12]) || 0,
+                caffeineGum: parseInt(values[13]) || 0,
+                water: parseFloat(values[14]) || 0
+              };
+              if (dayData.wakeUpTime || Object.values(dayData).some(v => typeof v === 'number' && v > 0)) {
+                newHistory[dateStr] = dayData;
+                importedCount++;
+              }
+            }
+            setHistory(newHistory);
+            setImportStatus({ type: 'success', message: 'Successfully imported ' + importedCount + ' days of data' });
+            setTimeout(() => setImportStatus(null), 3000);
+          } catch (err) {
+            setImportStatus({ type: 'error', message: 'Error parsing CSV file' });
+            setTimeout(() => setImportStatus(null), 3000);
+          }
+        };
+        reader.readAsText(file);
+        event.target.value = '';
+      };
+
+      const getCalendarWeeks = () => {
+        const days = getCurrentMonthDays();
+        const firstDayOfWeek = days[0].dayOfWeek;
+        const weeks = [];
+        let currentWeek = Array(firstDayOfWeek).fill(null);
+        days.forEach(day => {
+          currentWeek.push(day);
+          if (currentWeek.length === 7) { weeks.push(currentWeek); currentWeek = []; }
+        });
+        if (currentWeek.length > 0) { while (currentWeek.length < 7) currentWeek.push(null); weeks.push(currentWeek); }
+        return weeks;
+      };
+
+      const calendarWeeks = getCalendarWeeks();
+
+      const styles = {
+        card: { background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', border: '1px solid rgba(229, 231, 235, 0.5)', borderRadius: '16px', padding: '16px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05)', marginBottom: '16px' },
+        btn: { border: '1px solid rgba(229, 231, 235, 0.8)', borderRadius: '8px', padding: '6px 10px', fontFamily: 'inherit', fontSize: '11px', fontWeight: 600, cursor: 'pointer', background: 'rgba(249, 250, 251, 0.8)', color: '#374151', transition: 'all 0.2s ease', ':hover': { background: 'rgba(243, 244, 246, 0.9)' } },
+        sectionTitle: { fontWeight: 600, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#6b7280', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' },
+        activityCard: { background: 'rgba(255, 255, 255, 0.95)', border: '1px solid rgba(229, 231, 235, 0.6)', borderRadius: '12px', padding: '12px', marginBottom: '10px', flex: '0 0 auto', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)' },
+      };
+
+      const isEarlyWakeCheck = (wakeUpTime) => {
+        if (!wakeUpTime) return false;
+        const match = wakeUpTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+        if (match) {
+          const hour = parseInt(match[1]);
+          const minutes = parseInt(match[2]);
+          const period = match[3].toUpperCase();
+          if (period === 'AM') {
+            if (hour === 4 && minutes >= 30) return true;
+            if (hour === 5 && minutes <= 30) return true;
+          }
+        }
+        return false;
+      };
+
+      const dailyChecks = selectedData.dailyChecks || { daily1: false, daily2: false, daily3: false, daily4: false, daily5: false };
+      const nightlyChecks = selectedData.nightlyChecks || { nightly1: false, nightly2: false, nightly3: false, nightly4: false, nightly5: false };
+
+      return (
+        <div style={{ maxWidth: '500px', margin: '0 auto' }}>
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 249, 250, 0.9) 100%)',
+            backdropFilter: 'blur(20px)',
+            border: '1px solid rgba(255, 255, 255, 0.3)',
+            borderRadius: '0 0 24px 24px',
+            padding: '24px 20px 20px',
+            marginBottom: '20px',
+            marginLeft: '-16px',
+            marginRight: '-16px',
+            marginTop: '-16px',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04)',
+            textAlign: 'center'
+          }}>
+            <div style={{
+              fontFamily: 'Poppins, sans-serif',
+              fontWeight: 700,
+              fontSize: '28px',
+              color: '#000000',
+              letterSpacing: '-0.5px',
+              marginBottom: '4px'
+            }}>Ro's Daily Tracker</div>
+            <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 500, letterSpacing: '0.3px' }}>Your productivity companion</div>
+          </div>
+
+          <div style={styles.card}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <button style={{ ...styles.btn, padding: '8px 12px' }} onClick={goToPrevDay}>←</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: '#374151' }}>
+                  📅 {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                </div>
+                <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} style={{ border: '1px solid #e5e7eb', borderRadius: '6px', background: '#f9fafb', fontSize: '12px', padding: '4px 8px', color: '#374151', cursor: 'pointer' }} />
+                {!isToday && <button onClick={() => setSelectedDate(todayKey)} style={{ background: '#4A90A4', color: '#fff', border: 'none', borderRadius: '4px', padding: '4px 10px', fontSize: '11px', cursor: 'pointer', fontWeight: 600 }}>Today</button>}
+              </div>
+              <button style={{ ...styles.btn, padding: '8px 12px' }} onClick={goToNextDay}>→</button>
+            </div>
+          </div>
+
+          <div style={{ ...styles.card, padding: '12px 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '18px' }}>☀️</span>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: '#374151' }}>Wake Up</span>
+              </div>
+              {selectedData.wakeUpTime ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 700, color: '#4A90A4' }}>{selectedData.wakeUpTime}</div>
+                  <button style={{ ...styles.btn, padding: '4px 8px', fontSize: '10px' }} onClick={() => setHistory(prev => ({ ...prev, [selectedDate]: { ...(prev[selectedDate] || emptyDay), wakeUpTime: null } }))}>✕</button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <input 
+                    type="time" 
+                    value={pendingWakeTime}
+                    onChange={(e) => setPendingWakeTime(e.target.value)} 
+                    style={{ border: '1px solid #e5e7eb', borderRadius: '6px', background: '#f9fafb', fontSize: '12px', padding: '4px 8px', color: '#374151', cursor: 'pointer', width: '100px' }} 
+                  />
+                  {pendingWakeTime && (
+                    <button 
+                      style={{ ...styles.btn, padding: '6px 12px', fontSize: '10px', background: '#4A90A4', color: '#fff', border: 'none' }} 
+                      onClick={() => setManualWakeTime(pendingWakeTime)}
+                    >
+                      Set
+                    </button>
+                  )}
+                  <span style={{ fontSize: '11px', color: '#9ca3af' }}>or</span>
+                  <button style={{ ...styles.btn, padding: '6px 12px', fontSize: '10px' }} onClick={recordWakeUp}>⏰ Now</button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '12px', alignItems: 'flex-start' }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              {leftCategories.map(activity => (
+                <div style={styles.activityCard} key={activity.key}>
+                  <div style={styles.sectionTitle}>
+                    <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: activity.color }} />
+                    <span>{activity.label}</span>
+                    {selectedData[activity.key] > 0 && <span style={{ marginLeft: 'auto', background: activity.color, color: '#fff', padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: 700 }}>{selectedData[activity.key]}M</span>}
+                  </div>
+                  <div style={{ display: 'flex', gap: '3px', marginBottom: '4px' }}>
+                    <button style={{ ...styles.btn, flex: 1, padding: '6px 0', fontSize: '10px' }} onClick={() => addTime(activity.key, 15)}>+15</button>
+                    <button style={{ ...styles.btn, flex: 1, padding: '6px 0', fontSize: '10px' }} onClick={() => addTime(activity.key, 20)}>+20</button>
+                    <button style={{ ...styles.btn, flex: 1, padding: '6px 0', fontSize: '10px' }} onClick={() => addTime(activity.key, 30)}>+30</button>
+                    <button style={{ ...styles.btn, flex: 1, padding: '6px 0', fontSize: '10px', fontWeight: 700 }} onClick={() => subtractTime(activity.key, 10)}>−</button>
+                  </div>
+                  <div style={{ display: 'flex', gap: '3px' }}>
+                    <button style={{ ...styles.btn, flex: 1, padding: '6px 0', fontSize: '10px' }} onClick={() => addTime(activity.key, 45)}>+45</button>
+                    <button style={{ ...styles.btn, flex: 1, padding: '6px 0', fontSize: '10px' }} onClick={() => addTime(activity.key, 60)}>+60</button>
+                    <button style={{ ...styles.btn, flex: 1, padding: '6px 0', fontSize: '10px' }} onClick={() => addTime(activity.key, 100)}>+100</button>
+                    <button style={{ ...styles.btn, flex: 1, padding: '6px 0', fontSize: '10px', fontWeight: 700 }} onClick={() => addTime(activity.key, 10)}>+</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              {rightCategories.map(activity => (
+                <div style={styles.activityCard} key={activity.key}>
+                  <div style={styles.sectionTitle}>
+                    <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: activity.color }} />
+                    <span>{activity.label}</span>
+                    {selectedData[activity.key] > 0 && <span style={{ marginLeft: 'auto', background: activity.color, color: ['meditation', 'audiobook', 'focus'].includes(activity.key) ? '#333' : '#fff', padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: 700 }}>{selectedData[activity.key]}M</span>}
+                  </div>
+                  <div style={{ display: 'flex', gap: '3px', marginBottom: '4px' }}>
+                    <button style={{ ...styles.btn, flex: 1, padding: '6px 0', fontSize: '10px' }} onClick={() => addTime(activity.key, 15)}>+15</button>
+                    <button style={{ ...styles.btn, flex: 1, padding: '6px 0', fontSize: '10px' }} onClick={() => addTime(activity.key, 20)}>+20</button>
+                    <button style={{ ...styles.btn, flex: 1, padding: '6px 0', fontSize: '10px' }} onClick={() => addTime(activity.key, 30)}>+30</button>
+                    <button style={{ ...styles.btn, flex: 1, padding: '6px 0', fontSize: '10px', fontWeight: 700 }} onClick={() => subtractTime(activity.key, 10)}>−</button>
+                  </div>
+                  <div style={{ display: 'flex', gap: '3px' }}>
+                    <button style={{ ...styles.btn, flex: 1, padding: '6px 0', fontSize: '10px' }} onClick={() => addTime(activity.key, 45)}>+45</button>
+                    <button style={{ ...styles.btn, flex: 1, padding: '6px 0', fontSize: '10px' }} onClick={() => addTime(activity.key, 60)}>+60</button>
+                    <button style={{ ...styles.btn, flex: 1, padding: '6px 0', fontSize: '10px' }} onClick={() => addTime(activity.key, 100)}>+100</button>
+                    <button style={{ ...styles.btn, flex: 1, padding: '6px 0', fontSize: '10px', fontWeight: 700 }} onClick={() => addTime(activity.key, 10)}>+</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={styles.card}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div style={{ fontWeight: 700, fontSize: '14px', color: '#111827' }}>Stimulants & Hydration</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#4A90A4', background: '#EBF5FF', padding: '4px 10px', borderRadius: '8px' }}>{totalCaffeine} mg</div>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#0EA5E9', background: '#E0F2FE', padding: '4px 10px', borderRadius: '8px' }}>{totalWater} L</div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {[{ key: 'coffee', label: 'Coffee', icon: '☕', mg: 90, unit: 'shots' }, { key: 'caffeineGum', label: 'Caffeine Gum', icon: '🍬', mg: 30, unit: 'pieces' }].map(item => (
+                <div key={item.key} style={{ display: 'flex', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '120px' }}>
+                    <span style={{ fontSize: '16px' }}>{item.icon}</span>
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: '#374151' }}>{item.label}</div>
+                      <div style={{ fontSize: '9px', color: '#9ca3af' }}>{item.mg}mg / unit</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <button style={{ ...styles.btn, width: '32px', height: '28px', padding: 0, fontSize: '14px', fontWeight: 700, borderRadius: '6px' }} onClick={() => removeCount(item.key)}>−</button>
+                    <button style={{ ...styles.btn, width: '32px', height: '28px', padding: 0, fontSize: '14px', fontWeight: 700, borderRadius: '6px' }} onClick={() => addCount(item.key)}>+</button>
+                  </div>
+                  <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                    <span style={{ fontSize: '15px', fontWeight: 700, color: '#111827' }}>{selectedData[item.key] || 0}</span>
+                    <span style={{ fontSize: '10px', color: '#9ca3af' }}>{item.unit}</span>
+                  </div>
+                </div>
+              ))}
+              <div style={{ display: 'flex', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid #e5e7eb' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '120px' }}>
+                  <span style={{ fontSize: '16px' }}>💧</span>
+                  <div>
+                    <div style={{ fontSize: '11px', fontWeight: 600, color: '#374151' }}>Water</div>
+                    <div style={{ fontSize: '9px', color: '#9ca3af' }}>litres</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <button style={{ ...styles.btn, width: '44px', height: '28px', padding: 0, fontSize: '10px', fontWeight: 600, borderRadius: '6px' }} onClick={() => removeWater(0.5)}>−0.5</button>
+                  <button style={{ ...styles.btn, width: '44px', height: '28px', padding: 0, fontSize: '10px', fontWeight: 600, borderRadius: '6px' }} onClick={() => removeWater(0.25)}>−0.25</button>
+                  <button style={{ ...styles.btn, width: '44px', height: '28px', padding: 0, fontSize: '10px', fontWeight: 600, borderRadius: '6px' }} onClick={() => addWater(0.25)}>+0.25</button>
+                  <button style={{ ...styles.btn, width: '44px', height: '28px', padding: 0, fontSize: '10px', fontWeight: 600, borderRadius: '6px' }} onClick={() => addWater(0.5)}>+0.5</button>
+                </div>
+                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                  <span style={{ fontSize: '15px', fontWeight: 700, color: '#111827' }}>{totalWater}</span>
+                  <span style={{ fontSize: '10px', color: '#9ca3af' }}>litres</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={styles.card}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '14px', color: '#111827' }}>Monthly Performance Tracker</div>
+                <div style={{ fontSize: '11px', color: '#6b7280' }}>{currentMonthName}</div>
+              </div>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: '#4A90A4' }}>{totalSelected}m today</div>
+            </div>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <div style={{ flex: 1, paddingLeft: '32px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-end', height: '160px', gap: '1px', borderBottom: '1px solid #e5e7eb', background: '#fafafa', borderRadius: '8px', padding: '8px 4px 0', position: 'relative' }}>
+                  {gridLines.map(mins => (
+                    <div key={mins} style={{ position: 'absolute', left: 0, right: 0, bottom: ((mins / maxMinutes) * 100) + '%', borderTop: '1px solid #e5e7eb', pointerEvents: 'none', zIndex: 0 }}>
+                      <span style={{ position: 'absolute', left: '-28px', top: '-6px', fontSize: '7px', color: '#9ca3af' }}>{mins}</span>
+                    </div>
+                  ))}
+                  {chartDays.map((day) => {
+                    const dayData = history[day.key];
+                    const hasData = dayData && getTotal(dayData) > 0;
+                    const total = hasData ? getTotal(dayData) : 0;
+                    const barHeight = hasData ? Math.max(4, (total / maxMinutes) * 130) : 0;
+                    const isSelected = day.key === selectedDate;
+                    const getHeight = (key) => hasData && total > 0 ? ((dayData[key] || 0) / total) * barHeight : 0;
+                    return (
+                      <div key={day.key} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', cursor: 'pointer', zIndex: 1 }} onClick={() => setSelectedDate(day.key)}>
+                        {hasData && <div style={{ fontSize: '6px', color: '#9ca3af', marginBottom: '2px', whiteSpace: 'nowrap' }}>{total}</div>}
+                        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', borderRadius: '3px 3px 0 0', overflow: 'hidden', minHeight: '2px', border: isSelected ? '1px solid #fff' : 'none', borderBottom: 'none', boxShadow: isSelected ? '0 0 0 1px #4A90A4' : 'none' }}>
+                          {hasData && categories.slice().reverse().map(cat => (<div key={cat.key} style={{ height: getHeight(cat.key), background: cat.color }} />))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ display: 'flex', padding: '6px 4px 0', gap: '1px' }}>
+                  {chartDays.map((day) => {
+                    const isSelected = day.key === selectedDate;
+                    return <div key={day.key} style={{ flex: 1, textAlign: 'center', fontSize: '7px', cursor: 'pointer', fontWeight: isSelected ? 700 : 400, color: isSelected ? '#4A90A4' : '#9ca3af' }} onClick={() => setSelectedDate(day.key)}>{day.dateLabel}</div>;
+                  })}
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '4px', paddingLeft: '8px', borderLeft: '1px solid #e5e7eb' }}>
+                {categories.map(cat => (
+                  <div key={cat.key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: cat.color }} />
+                    <span style={{ fontSize: '8px', color: '#6b7280', whiteSpace: 'nowrap' }}>{cat.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div style={styles.card}>
+            <div style={{ fontWeight: 700, fontSize: '14px', color: '#111827', marginBottom: '12px' }}>Calendar View</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '8px' }}>
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (<div key={d} style={{ fontSize: '9px', fontWeight: 600, color: '#9ca3af', textAlign: 'center', padding: '4px 0' }}>{d}</div>))}
+            </div>
+            {calendarWeeks.map((week, weekIdx) => (
+              <div key={weekIdx} style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '4px' }}>
+                {week.map((day, dayIdx) => {
+                  if (!day) return <div key={dayIdx} style={{ height: '52px' }} />;
+                  const dayData = history[day.key];
+                  const hasData = dayData && getTotal(dayData) > 0;
+                  const hasGym = dayData && dayData.gym > 0;
+                  const hasCardio = dayData && dayData.cardio > 0;
+                  const hasStretching = dayData && dayData.stretching > 0;
+                  const hasWalking = dayData && dayData.walking > 0;
+                  const hasWakeUp = dayData && dayData.wakeUpTime;
+                  const isSelected = day.key === selectedDate;
+                  const dayCaffeine = getCaffeine(dayData);
+                  const dayWater = dayData ? dayData.water || 0 : 0;
+                  const isEarlyWake = isEarlyWakeCheck(dayData ? dayData.wakeUpTime : null);
+                  const isLateWake = hasWakeUp && !isEarlyWake;
+                  let bgColor = '#fff';
+                  if (isSelected) bgColor = '#EBF5FF';
+                  else if (isEarlyWake) bgColor = '#DCFCE7';
+                  else if (isLateWake) bgColor = '#FEF2F2';
+                  else if (hasData) bgColor = '#f9fafb';
+                  return (
+                    <div key={day.key} style={{ height: '52px', display: 'flex', flexDirection: 'column', borderRadius: '6px', background: bgColor, border: isSelected ? '2px solid #4A90A4' : '1px solid #e5e7eb', padding: '3px 4px', overflow: 'hidden', cursor: 'pointer' }} onClick={() => setSelectedDate(day.key)}>
+                      <div style={{ fontSize: '12px', fontWeight: isSelected ? 700 : 500, color: day.isFuture ? '#d1d5db' : (isSelected ? '#4A90A4' : '#374151'), lineHeight: 1 }}>{day.dateLabel}</div>
+                      {hasWakeUp && <div style={{ fontSize: '8px', color: '#4A90A4', fontWeight: 600, lineHeight: 1, marginTop: '1px' }}>{dayData.wakeUpTime}</div>}
+                      <div style={{ display: 'flex', gap: '4px', marginTop: 'auto', marginBottom: '2px' }}>
+                        {dayCaffeine > 0 && <div style={{ fontSize: '7px', color: '#8B5CF6', fontWeight: 600, lineHeight: 1 }}>{dayCaffeine}mg</div>}
+                        {dayWater > 0 && <div style={{ fontSize: '7px', color: '#0EA5E9', fontWeight: 600, lineHeight: 1 }}>{dayWater}L</div>}
+                      </div>
+                      <div style={{ display: 'flex', gap: '2px' }}>
+                        {hasWalking && <div style={{ width: '8px', height: '6px', borderRadius: '1px', background: '#7EB6E6' }} />}
+                        {hasCardio && <div style={{ width: '8px', height: '6px', borderRadius: '1px', background: '#5588BB' }} />}
+                        {hasGym && <div style={{ width: '8px', height: '6px', borderRadius: '1px', background: '#4A5588' }} />}
+                        {hasStretching && <div style={{ width: '8px', height: '6px', borderRadius: '1px', background: '#2A2A50' }} />}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #e5e7eb' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#DCFCE7', border: '1px solid #86EFAC' }} /><span style={{ fontSize: '9px', color: '#6b7280' }}>Early Wake (4:30-5:30 AM)</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#FEF2F2', border: '1px solid #FECACA' }} /><span style={{ fontSize: '9px', color: '#6b7280' }}>Late Wake (&gt;5:30 AM)</span></div>
+            </div>
+          </div>
+
+          <div style={styles.card}>
+            <div style={{ fontWeight: 700, fontSize: '14px', color: '#111827', marginBottom: '12px' }}>Physical Activity Tracker</div>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              {[0, 1].map(colIndex => {
+                const startDay = colIndex * 16;
+                const endDay = Math.min(startDay + 16, chartDays.length);
+                const columnDays = chartDays.slice(startDay, endDay);
+                return (
+                  <div key={colIndex} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    {columnDays.map(day => {
+                      const dayData = history[day.key];
+                      const hasStretching = dayData && dayData.stretching > 0;
+                      const hasCardio = dayData && dayData.cardio > 0;
+                      const hasGym = dayData && dayData.gym > 0;
+                      const hasWalking = dayData && dayData.walking > 0;
+                      const coffeeCount = dayData ? dayData.coffee || 0 : 0;
+                      const gumCount = dayData ? dayData.caffeineGum || 0 : 0;
+                      const waterAmt = dayData ? dayData.water || 0 : 0;
+                      const isSelected = day.key === selectedDate;
+                      const hasWakeUp = dayData && dayData.wakeUpTime;
+                      const isEarlyWake = isEarlyWakeCheck(dayData ? dayData.wakeUpTime : null);
+                      const isLateWake = hasWakeUp && !isEarlyWake;
+                      let rowBg = 'transparent';
+                      if (isSelected) rowBg = '#EBF5FF';
+                      else if (isEarlyWake) rowBg = '#DCFCE7';
+                      else if (isLateWake) rowBg = '#FEF2F2';
+                      return (
+                        <div key={day.key} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 4px', background: rowBg, borderRadius: '4px', cursor: 'pointer' }} onClick={() => setSelectedDate(day.key)}>
+                          <div style={{ width: '18px', fontSize: '9px', fontWeight: isSelected ? 700 : 500, color: day.isFuture ? '#d1d5db' : (isSelected ? '#4A90A4' : '#6b7280') }}>{day.dateLabel}</div>
+                          <div style={{ display: 'flex', gap: '2px', alignItems: 'center', flexWrap: 'nowrap' }}>
+                            <div style={{ width: '14px', height: '12px', borderRadius: '2px', background: hasWalking ? '#7EB6E6' : '#f3f4f6', border: '1px solid #e5e7eb', flexShrink: 0 }} />
+                            <div style={{ width: '14px', height: '12px', borderRadius: '2px', background: hasCardio ? '#5588BB' : '#f3f4f6', border: '1px solid #e5e7eb', flexShrink: 0 }} />
+                            <div style={{ width: '14px', height: '12px', borderRadius: '2px', background: hasGym ? '#4A5588' : '#f3f4f6', border: '1px solid #e5e7eb', flexShrink: 0 }} />
+                            <div style={{ width: '14px', height: '12px', borderRadius: '2px', background: hasStretching ? '#2A2A50' : '#f3f4f6', border: '1px solid #e5e7eb', flexShrink: 0 }} />
+                            {(coffeeCount > 0 || gumCount > 0 || waterAmt > 0) && (
+                              <span style={{ fontSize: '7px', marginLeft: '2px', color: '#6b7280', fontWeight: 500, flexShrink: 0 }}>
+                                {(coffeeCount * 90 + gumCount * 30) > 0 && <span style={{ color: '#8B5CF6' }}>{coffeeCount * 90 + gumCount * 30}mg</span>}
+                                {(coffeeCount * 90 + gumCount * 30) > 0 && waterAmt > 0 && ' / '}
+                                {waterAmt > 0 && <span style={{ color: '#0EA5E9' }}>{waterAmt}L</span>}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #e5e7eb', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#7EB6E6' }} /><span style={{ fontSize: '9px', color: '#6b7280' }}>Walk</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#5588BB' }} /><span style={{ fontSize: '9px', color: '#6b7280' }}>Cardio</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#4A5588' }} /><span style={{ fontSize: '9px', color: '#6b7280' }}>Gym</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#2A2A50' }} /><span style={{ fontSize: '9px', color: '#6b7280' }}>Stretch</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ fontSize: '9px', color: '#8B5CF6', fontWeight: 600 }}>mg</span><span style={{ fontSize: '9px', color: '#6b7280' }}>Caffeine</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ fontSize: '9px', color: '#0EA5E9', fontWeight: 600 }}>L</span><span style={{ fontSize: '9px', color: '#6b7280' }}>Water</span></div>
+            </div>
+          </div>
+
+          <div style={styles.card}>
+            <div style={{ fontWeight: 700, fontSize: '14px', color: '#111827', marginBottom: '12px' }}>Daily Checklists</div>
+            <div style={{ display: 'flex', gap: '16px' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>☀️ Morning</div>
+                {dailyItems.map(item => (
+                  <div 
+                    key={item.key} 
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 0', borderBottom: '1px solid #f3f4f6', cursor: 'pointer' }}
+                    onClick={() => toggleDailyCheck(item.key)}
+                  >
+                    <div style={{ 
+                      width: '18px', 
+                      height: '18px', 
+                      borderRadius: '4px', 
+                      border: dailyChecks[item.key] ? '2px solid #10B981' : '2px solid #d1d5db',
+                      background: dailyChecks[item.key] ? '#10B981' : '#fff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      transition: 'all 0.2s ease'
+                    }}>
+                      {dailyChecks[item.key] && <span style={{ color: '#fff', fontSize: '11px', fontWeight: 700 }}>✓</span>}
+                    </div>
+                    <span style={{ fontSize: '11px', color: dailyChecks[item.key] ? '#9ca3af' : '#374151', textDecoration: dailyChecks[item.key] ? 'line-through' : 'none' }}>{item.label}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ width: '1px', background: '#e5e7eb' }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#6b7280', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>🌙 Night</div>
+                {nightlyItems.map(item => (
+                  <div 
+                    key={item.key} 
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 0', borderBottom: '1px solid #f3f4f6', cursor: 'pointer' }}
+                    onClick={() => toggleNightlyCheck(item.key)}
+                  >
+                    <div style={{ 
+                      width: '18px', 
+                      height: '18px', 
+                      borderRadius: '4px', 
+                      border: nightlyChecks[item.key] ? '2px solid #047857' : '2px solid #d1d5db',
+                      background: nightlyChecks[item.key] ? '#047857' : '#fff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      transition: 'all 0.2s ease'
+                    }}>
+                      {nightlyChecks[item.key] && <span style={{ color: '#fff', fontSize: '11px', fontWeight: 700 }}>✓</span>}
+                    </div>
+                    <span style={{ fontSize: '11px', color: nightlyChecks[item.key] ? '#9ca3af' : '#374151', textDecoration: nightlyChecks[item.key] ? 'line-through' : 'none' }}>{item.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div style={styles.card}>
+            <div style={{ fontWeight: 700, fontSize: '14px', color: '#111827', marginBottom: '12px' }}>Data</div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {!showResetConfirm ? (
+                <button style={{ ...styles.btn, flex: 1, padding: '12px 8px', fontSize: '11px', textAlign: 'center' }} onClick={() => setShowResetConfirm(true)}>🗑️ Reset Day's Data</button>
+              ) : (
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', padding: '8px', background: '#FEF2F2', borderRadius: '6px' }}>
+                  <span style={{ fontSize: '11px', color: '#DC2626' }}>Reset {formatSelectedDate()}?</span>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button style={{ ...styles.btn, padding: '6px 12px', fontSize: '10px', background: '#DC2626', color: '#fff', border: 'none' }} onClick={resetDay}>Yes</button>
+                    <button style={{ ...styles.btn, padding: '6px 12px', fontSize: '10px' }} onClick={() => setShowResetConfirm(false)}>Cancel</button>
+                  </div>
+                </div>
+              )}
+              <button style={{ ...styles.btn, flex: 1, padding: '12px 8px', fontSize: '11px', textAlign: 'center' }} onClick={exportToExcel}>📥 Export Month's Data</button>
+              <input ref={fileInputRef} type="file" accept=".csv" onChange={handleImportCSV} style={{ display: 'none' }} />
+              <button style={{ ...styles.btn, flex: 1, padding: '12px 8px', fontSize: '11px', textAlign: 'center' }} onClick={() => fileInputRef.current && fileInputRef.current.click()}>📤 Upload CSV Data</button>
+            </div>
+            {importStatus && (
+              <div style={{ padding: '10px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 500, background: importStatus.type === 'success' ? '#DCFCE7' : '#FEF2F2', color: importStatus.type === 'success' ? '#166534' : '#DC2626', textAlign: 'center', marginTop: '12px' }}>{importStatus.message}</div>
+            )}
+          </div>
+
+          <div style={{ textAlign: 'center', padding: '16px 0 8px', color: '#9ca3af', fontSize: '10px' }}>Keep building momentum 💪</div>
+        </div>
+      );
+    };
+
+    ReactDOM.createRoot(document.getElementById('app')).render(<ProductivityTracker />);
+  </script>
+</body>
+</html>
+
