@@ -23,6 +23,7 @@
     }
     #app { max-width: 500px; margin: 0 auto; padding: 0 16px 16px; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes fadeInOut { 0% { opacity: 0; transform: translateY(-6px); } 15% { opacity: 1; transform: translateY(0); } 70% { opacity: 1; } 100% { opacity: 0; } }
   </style>
 </head>
 <body>
@@ -100,6 +101,7 @@
       ketoneEsters: 0,
       mctOil: 0,
       heartSaltPinkSalt: 0,
+      ketoneSalts: 0,
       soloLemonOrange: 0,
       sparklingWater: 0,
       plainWater: 0
@@ -135,9 +137,10 @@
       { key: 'plainWater', label: 'Plain Water', color: '#0EA5E9' },
       { key: 'sparklingWater', label: 'Sparkling Water', color: '#38BDF8' },
       { key: 'heartSaltPinkSalt', label: 'Heart Salt + Pink Salt', color: '#E5A04E' },
+      { key: 'ketoneSalts', label: 'Ketone Salts', color: '#8B5CF6' },
       { key: 'ketoneEsters', label: 'Ketone Esters', color: '#7C3AED' },
       { key: 'mctOil', label: 'MCT Oil', color: '#059669' },
-      { key: 'boneBrothSaint', label: 'Bone Broth — Saint', color: '#B85450' },
+      { key: 'boneBrothSaint', label: 'Bone Broth w/ Collagen — Saint', color: '#B85450' },
       { key: 'boneBrothHome', label: 'Bone Broth — Home', color: '#D4736F' },
       { key: 'soloLemonOrange', label: 'Solo Lemon Orange', color: '#F59E0B' }
     ];
@@ -150,6 +153,7 @@
 
     const getCaffeineMg = (data) => data ? (data.coffee || 0) * 90 + (data.caffeineGum || 0) * 30 : 0;
     const getNicotineMg = (data) => data ? (data.nicotineGum || 0) * 2 : 0;
+    const hasPainkillers = (data) => data ? (data.nurofen || 0) + (data.panadol || 0) > 0 : false;
 
     const isEarlyWakeCheck = (wakeUpTime) => {
       if (!wakeUpTime) return false;
@@ -200,6 +204,7 @@
       const [showResetConfirm, setShowResetConfirm] = useState(false);
       const [pendingWakeTime, setPendingWakeTime] = useState('');
       const [isRefreshing, setIsRefreshing] = useState(false);
+      const [refreshToast, setRefreshToast] = useState(false);
 
       const todayKey = getTodayKey();
       const selectedData = history[selectedDate] || EMPTY_DAY;
@@ -266,6 +271,7 @@
       // ---- Pull-to-refresh: reload from Supabase ----
       const refreshData = useCallback(async () => {
         setIsRefreshing(true);
+        const startTime = Date.now();
         try {
           const { data, error } = await supabase.from(DB_TABLE).select('*');
           if (!error && data) {
@@ -277,7 +283,13 @@
         } catch (err) {
           console.log('Refresh failed:', err);
         }
+        // Ensure spinner shows for at least 1s so user sees it
+        const elapsed = Date.now() - startTime;
+        if (elapsed < 1000) await new Promise(r => setTimeout(r, 1000 - elapsed));
         setIsRefreshing(false);
+        // Show "Synced" toast
+        setRefreshToast(true);
+        setTimeout(() => setRefreshToast(false), 1800);
       }, []);
 
       // ---- Save to Supabase + local on every change ----
@@ -377,7 +389,7 @@
       };
 
       return {
-        state: { history, selectedDate, showResetConfirm, pendingWakeTime, isRefreshing },
+        state: { history, selectedDate, showResetConfirm, pendingWakeTime, isRefreshing, refreshToast },
         actions: { setSelectedDate, setShowResetConfirm, setPendingWakeTime, recordWakeUp, setManualWakeTime, clearWakeTime, addCount, removeCount, toggleSupplement, resetDay, goToPrevDay, goToNextDay, goToToday, refreshData },
         computed: { todayKey, selectedData, totalCaffeine, isToday, formatSelectedDate }
       };
@@ -386,7 +398,7 @@
     // ============ MAIN APP ============
     const StimulantTracker = () => {
       const { state, actions, computed } = useTrackerData();
-      const { history, selectedDate, showResetConfirm, pendingWakeTime, isRefreshing } = state;
+      const { history, selectedDate, showResetConfirm, pendingWakeTime, isRefreshing, refreshToast } = state;
       const { setSelectedDate, setShowResetConfirm, setPendingWakeTime, recordWakeUp, setManualWakeTime, clearWakeTime, addCount, removeCount, toggleSupplement, resetDay, goToPrevDay, goToNextDay, goToToday, refreshData } = actions;
       const { todayKey, selectedData, totalCaffeine, isToday, formatSelectedDate } = computed;
 
@@ -444,6 +456,23 @@
                   animation: isRefreshing ? 'spin 1s linear infinite' : 'none'
                 }}>{isRefreshing ? '↻' : '↓'}</span>
                 {isRefreshing ? 'Refreshing...' : pullDistance >= PULL_THRESHOLD ? 'Release to refresh' : 'Pull to refresh'}
+              </div>
+            </div>
+          )}
+
+          {/* ---- Synced toast ---- */}
+          {refreshToast && (
+            <div style={{
+              display: 'flex', justifyContent: 'center', alignItems: 'center',
+              padding: '8px 0',
+              animation: 'fadeInOut 1.8s ease forwards'
+            }}>
+              <div style={{
+                background: '#DCFCE7', border: '1px solid #86EFAC', borderRadius: '20px',
+                padding: '6px 16px', fontSize: '11px', fontWeight: 600, color: '#16A34A',
+                display: 'flex', alignItems: 'center', gap: '5px'
+              }}>
+                <span>✓</span> Data synced
               </div>
             </div>
           )}
@@ -644,7 +673,8 @@
                   const dayNic = getNicotineMg(dayData);
                   const isEarlyWake = isEarlyWakeCheck(dayData ? dayData.wakeUpTime : null);
                   const isLateWake = hasWakeUp && !isEarlyWake;
-                  const hasAnyData = hasWakeUp || dayCaff > 0 || dayNic > 0;
+                  const dayHasPK = hasPainkillers(dayData);
+                  const hasAnyData = hasWakeUp || dayCaff > 0 || dayNic > 0 || dayHasPK;
 
                   let bgColor = '#fff';
                   if (isSelected) bgColor = '#EBF5FF';
@@ -662,8 +692,10 @@
                       border: isSelected ? '2px solid #4A90A4' : '1px solid #e5e7eb',
                       padding: '3px 4px',
                       overflow: 'hidden',
-                      cursor: 'pointer'
+                      cursor: 'pointer',
+                      position: 'relative'
                     }} onClick={() => setSelectedDate(day.key)}>
+                      {dayHasPK && <span style={{ position: 'absolute', top: '2px', right: '3px', fontSize: '7px', lineHeight: 1, color: '#E05A33' }}>✖</span>}
                       <div style={{ fontSize: '12px', fontWeight: isSelected ? 700 : 500, color: day.isFuture ? '#d1d5db' : (isSelected ? '#4A90A4' : '#374151'), lineHeight: 1 }}>{day.dateLabel}</div>
                       {hasWakeUp && <div style={{ fontSize: '8px', color: '#4A90A4', fontWeight: 600, lineHeight: 1, marginTop: '2px' }}>{dayData.wakeUpTime}</div>}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', marginTop: 'auto', marginBottom: '1px' }}>
@@ -675,14 +707,18 @@
                 })}
               </div>
             ))}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #e5e7eb' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', flexWrap: 'wrap', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #e5e7eb' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#DCFCE7', border: '1px solid #86EFAC' }} />
-                <span style={{ fontSize: '9px', color: '#6b7280' }}>Early Wake (4:30-5:30 AM)</span>
+                <span style={{ fontSize: '9px', color: '#6b7280' }}>Early Wake</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#FEF2F2', border: '1px solid #FECACA' }} />
-                <span style={{ fontSize: '9px', color: '#6b7280' }}>Late Wake (&gt;5:30 AM)</span>
+                <span style={{ fontSize: '9px', color: '#6b7280' }}>Late Wake</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ fontSize: '9px', color: '#E05A33', fontWeight: 700 }}>✖</span>
+                <span style={{ fontSize: '9px', color: '#6b7280' }}>Painkiller</span>
               </div>
             </div>
           </div>
@@ -751,7 +787,14 @@
                   <div style={{ display: 'flex', padding: '6px 4px 0', gap: '1px' }}>
                     {chartDays.map((day) => {
                       const isSelected = day.key === selectedDate;
-                      return <div key={day.key} style={{ flex: 1, textAlign: 'center', fontSize: '7px', cursor: 'pointer', fontWeight: isSelected ? 700 : 400, color: isSelected ? '#4A90A4' : '#9ca3af' }} onClick={() => setSelectedDate(day.key)}>{day.dateLabel}</div>;
+                      const d = history[day.key];
+                      const dayHasPK = hasPainkillers(d);
+                      return (
+                        <div key={day.key} style={{ flex: 1, textAlign: 'center', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center' }} onClick={() => setSelectedDate(day.key)}>
+                          <span style={{ fontSize: '7px', fontWeight: isSelected ? 700 : 400, color: isSelected ? '#4A90A4' : '#9ca3af', lineHeight: 1 }}>{day.dateLabel}</span>
+                          {dayHasPK && <span style={{ fontSize: '6px', color: '#E05A33', lineHeight: 1, marginTop: '1px' }}>✖</span>}
+                        </div>
+                      );
                     })}
                   </div>
                 </div>
