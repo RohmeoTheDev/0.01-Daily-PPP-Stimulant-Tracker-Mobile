@@ -104,7 +104,8 @@
       ketoneSalts: 0,
       soloLemonOrange: 0,
       sparklingWater: 0,
-      plainWater: 0
+      plainWater: 0,
+      peanutButterSpoon: 0
     };
 
     const STIMULANT_ITEMS = [
@@ -142,7 +143,8 @@
       { key: 'mctOil', label: 'MCT Oil', color: '#059669' },
       { key: 'boneBrothSaint', label: 'Bone Broth w/ Collagen — Saint', color: '#B85450' },
       { key: 'boneBrothHome', label: 'Bone Broth — Home', color: '#D4736F' },
-      { key: 'soloLemonOrange', label: 'Solo Lemon Orange', color: '#F59E0B' }
+      { key: 'soloLemonOrange', label: 'Solo Lemon Orange', color: '#F59E0B' },
+      { key: 'peanutButterSpoon', label: 'Peanut Butter Spoon', color: '#A0522D' }
     ];
 
     // ============ UTILITY FUNCTIONS ============
@@ -572,7 +574,7 @@
 
           {/* ---- Drinks ---- */}
           <div style={styles.card}>
-            <div style={{ fontSize: '10px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Drinks</div>
+            <div style={{ fontSize: '10px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Drinks & Fasting Supplements</div>
             {DRINK_ITEMS.map((item, idx) => {
               const count = selectedData[item.key] || 0;
               return (
@@ -659,67 +661,89 @@
             </div>
           </div>
 
-          {/* ---- Stacked Bar Chart ---- */}
+          {/* ---- Dual-Axis Chart: Caffeine (left) + Nicotine (right) ---- */}
           {(() => {
             const chartDays = getCurrentMonthDays();
-            const maxCount = Math.max(...chartDays.map(day => {
-              const d = history[day.key];
-              return d ? (d.coffee || 0) + (d.caffeineGum || 0) + (d.nicotineGum || 0) : 0;
-            }), 4);
             const chartHeight = 140;
-            const gridStep = maxCount <= 8 ? 2 : maxCount <= 16 ? 4 : 5;
-            const gridLines = [];
-            for (let i = gridStep; i <= maxCount; i += gridStep) gridLines.push(i);
+            const chartInner = chartHeight - 16;
+
+            const caffValues = chartDays.map(day => getCaffeineMg(history[day.key]));
+            const nicValues = chartDays.map(day => getNicotineMg(history[day.key]));
+
+            const maxCaff = Math.max(...caffValues, 90);
+            const maxNic = Math.max(...nicValues, 2);
+
+            const caffStep = maxCaff <= 180 ? 30 : maxCaff <= 360 ? 60 : 90;
+            const nicStep = maxNic <= 6 ? 1 : maxNic <= 12 ? 2 : 4;
+
+            const caffGridLines = [];
+            for (let i = caffStep; i <= maxCaff; i += caffStep) caffGridLines.push(i);
+            const nicGridLines = [];
+            for (let i = nicStep; i <= maxNic; i += nicStep) nicGridLines.push(i);
+
             return (
               <div style={styles.card}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                   <div style={{ fontWeight: 700, fontSize: '14px', color: '#111827' }}>Daily Intake</div>
                   <div style={{ display: 'flex', gap: '12px' }}>
-                    {STIMULANT_ITEMS.map(item => (
-                      <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <div style={{ width: '10px', height: '10px', borderRadius: '3px', background: item.color }} />
-                        <span style={{ fontSize: '9px', color: '#6b7280' }}>{item.label.split(' ')[0]}</span>
-                      </div>
-                    ))}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <div style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#5588BB' }} />
+                      <span style={{ fontSize: '9px', color: '#6b7280' }}>Caffeine</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#B85450' }} />
+                      <span style={{ fontSize: '9px', color: '#6b7280' }}>Nicotine</span>
+                    </div>
                   </div>
                 </div>
-                <div style={{ paddingLeft: '24px', position: 'relative' }}>
+                <div style={{ position: 'relative', paddingLeft: '28px', paddingRight: '28px' }}>
+                  {/* Left axis labels (Caffeine mg) */}
+                  {caffGridLines.map(val => (
+                    <div key={'cL' + val} style={{ position: 'absolute', left: 0, bottom: (val / maxCaff) * chartInner + 16 + 'px', width: '24px', textAlign: 'right', pointerEvents: 'none' }}>
+                      <span style={{ fontSize: '7px', color: '#5588BB', fontWeight: 600 }}>{val}</span>
+                    </div>
+                  ))}
+                  {/* Right axis labels (Nicotine mg) */}
+                  {nicGridLines.map(val => (
+                    <div key={'nR' + val} style={{ position: 'absolute', right: 0, bottom: (val / maxNic) * chartInner + 16 + 'px', width: '24px', textAlign: 'left', pointerEvents: 'none' }}>
+                      <span style={{ fontSize: '7px', color: '#B85450', fontWeight: 600 }}>{val}</span>
+                    </div>
+                  ))}
                   <div style={{ display: 'flex', alignItems: 'flex-end', height: chartHeight + 'px', gap: '1px', background: '#fafafa', borderRadius: '8px', padding: '8px 4px 0', position: 'relative', borderBottom: '1px solid #e5e7eb' }}>
-                    {gridLines.map(val => (
-                      <div key={val} style={{ position: 'absolute', left: 0, right: 0, bottom: ((val / maxCount) * 100) + '%', borderTop: '1px dashed #e5e7eb', pointerEvents: 'none', zIndex: 0 }}>
-                        <span style={{ position: 'absolute', left: '-22px', top: '-6px', fontSize: '8px', color: '#9ca3af' }}>{val}</span>
-                      </div>
+                    {/* Grid lines based on caffeine scale */}
+                    {caffGridLines.map(val => (
+                      <div key={'g' + val} style={{ position: 'absolute', left: 0, right: 0, bottom: ((val / maxCaff) * 100) + '%', borderTop: '1px dashed rgba(85,136,187,0.15)', pointerEvents: 'none', zIndex: 0 }} />
                     ))}
-                    {chartDays.map((day) => {
-                      const d = history[day.key];
-                      const coffee = d ? d.coffee || 0 : 0;
-                      const cafGum = d ? d.caffeineGum || 0 : 0;
-                      const nic = d ? d.nicotineGum || 0 : 0;
-                      const total = coffee + cafGum + nic;
-                      const barH = total > 0 ? Math.max(4, (total / maxCount) * (chartHeight - 16)) : 0;
+                    {/* Bars + nicotine dots */}
+                    {chartDays.map((day, i) => {
+                      const caff = caffValues[i];
+                      const nic = nicValues[i];
                       const isSelected = day.key === selectedDate;
+                      const barH = caff > 0 ? Math.max(3, (caff / maxCaff) * chartInner) : 0;
+                      const nicDotBottom = nic > 0 ? (nic / maxNic) * chartInner : null;
                       return (
-                        <div key={day.key} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', cursor: 'pointer', zIndex: 1 }} onClick={() => setSelectedDate(day.key)}>
-                          {total > 0 && <div style={{ fontSize: '6px', color: '#9ca3af', marginBottom: '2px' }}>{total}</div>}
+                        <div key={day.key} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', cursor: 'pointer', zIndex: 1, position: 'relative' }} onClick={() => setSelectedDate(day.key)}>
+                          {/* Nicotine dot */}
+                          {nicDotBottom !== null && (
+                            <div style={{
+                              position: 'absolute', bottom: nicDotBottom + 'px', left: '50%', transform: 'translateX(-50%)',
+                              width: '5px', height: '5px', borderRadius: '50%', background: '#B85450',
+                              border: '1px solid #fff', zIndex: 3
+                            }} />
+                          )}
+                          {/* Caffeine bar */}
                           <div style={{
-                            width: '100%',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            borderRadius: '3px 3px 0 0',
-                            overflow: 'hidden',
-                            minHeight: '2px',
-                            border: isSelected ? '1px solid #fff' : 'none',
-                            borderBottom: 'none',
-                            boxShadow: isSelected ? '0 0 0 1.5px #4A90A4' : 'none'
-                          }}>
-                            {nic > 0 && <div style={{ height: (nic / maxCount) * (chartHeight - 16) + 'px', background: '#B85450' }} />}
-                            {cafGum > 0 && <div style={{ height: (cafGum / maxCount) * (chartHeight - 16) + 'px', background: '#D4AA44' }} />}
-                            {coffee > 0 && <div style={{ height: (coffee / maxCount) * (chartHeight - 16) + 'px', background: '#5588BB' }} />}
-                          </div>
+                            width: '70%', height: barH + 'px',
+                            background: isSelected ? '#4A7FA0' : '#5588BB',
+                            borderRadius: '2px 2px 0 0', minHeight: caff > 0 ? '3px' : '0px',
+                            boxShadow: isSelected ? '0 0 0 1.5px #4A90A4' : 'none',
+                            opacity: caff > 0 ? 1 : 0
+                          }} />
                         </div>
                       );
                     })}
                   </div>
+                  {/* Day labels */}
                   <div style={{ display: 'flex', padding: '6px 4px 0', gap: '1px' }}>
                     {chartDays.map((day) => {
                       const isSelected = day.key === selectedDate;
@@ -733,6 +757,11 @@
                       );
                     })}
                   </div>
+                </div>
+                {/* Axis labels */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', padding: '0 4px' }}>
+                  <span style={{ fontSize: '8px', color: '#5588BB', fontWeight: 600 }}>← Caffeine (mg)</span>
+                  <span style={{ fontSize: '8px', color: '#B85450', fontWeight: 600 }}>Nicotine (mg) →</span>
                 </div>
               </div>
             );
