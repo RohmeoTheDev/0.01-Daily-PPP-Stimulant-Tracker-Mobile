@@ -111,7 +111,7 @@
     const STIMULANT_ITEMS = [
       { key: 'coffee', label: 'Coffee', mg: 90, color: '#5588BB' },
       { key: 'caffeineGum', label: 'Caff Gum', mg: 30, color: '#D4AA44' },
-      { key: 'nicotineGum', label: 'Nicotine Gum', mg: 2, color: '#B85450', step: 0.5 }
+      { key: 'nicotineGum', label: 'Nicotine Gum', mg: 2, color: '#B85450', step: 0.25 }
     ];
 
     const PAINKILLER_ITEMS = [
@@ -728,13 +728,13 @@
                             <div style={{
                               position: 'absolute', bottom: nicDotBottom + 'px', left: '50%', transform: 'translateX(-50%)',
                               width: '5px', height: '5px', borderRadius: '50%', background: '#B85450',
-                              border: '1px solid #fff', zIndex: 3
+                              zIndex: 3
                             }} />
                           )}
                           {/* Caffeine bar */}
                           <div style={{
                             width: '70%', height: barH + 'px',
-                            background: isSelected ? '#4A7FA0' : '#5588BB',
+                            background: isSelected ? '#7AB8D9' : '#90CCE6',
                             borderRadius: '2px 2px 0 0', minHeight: caff > 0 ? '3px' : '0px',
                             boxShadow: isSelected ? '0 0 0 1.5px #4A90A4' : 'none',
                             opacity: caff > 0 ? 1 : 0
