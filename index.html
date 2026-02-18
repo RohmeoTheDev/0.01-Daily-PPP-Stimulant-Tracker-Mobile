@@ -135,16 +135,16 @@
     const ALL_SUPPLEMENTS = [...DAYTIME_SUPPLEMENTS, ...NIGHTTIME_SUPPLEMENTS];
 
     const DRINK_ITEMS = [
-      { key: 'plainWater', label: 'Plain Water', color: '#0EA5E9' },
-      { key: 'sparklingWater', label: 'Sparkling Water', color: '#38BDF8' },
-      { key: 'heartSaltPinkSalt', label: 'Heart Salt + Pink Salt', color: '#E5A04E' },
-      { key: 'ketoneSalts', label: 'Ketone Salts', color: '#8B5CF6' },
-      { key: 'ketoneEsters', label: 'Ketone Esters', color: '#7C3AED' },
-      { key: 'mctOil', label: 'MCT Oil', color: '#059669' },
-      { key: 'boneBrothSaint', label: 'Bone Broth w/ Collagen — Saint', color: '#B85450' },
-      { key: 'boneBrothHome', label: 'Bone Broth — Home', color: '#D4736F' },
-      { key: 'soloLemonOrange', label: 'Solo Lemon Orange', color: '#F59E0B' },
-      { key: 'peanutButterSpoon', label: 'Peanut Butter Spoon', color: '#A0522D' }
+      { key: 'plainWater', label: 'Plain Water', color: '#0EA5E9', step: 0.5, unit: 'L' },
+      { key: 'sparklingWater', label: 'Sparkling Water', color: '#38BDF8', step: 0.5, unit: 'L' },
+      { key: 'heartSaltPinkSalt', label: 'Heart Salt + Pink Salt', color: '#E5A04E', step: 0.5, unit: 'L' },
+      { key: 'ketoneSalts', label: 'Ketone Salts', color: '#8B5CF6', step: 5, unit: 'mL' },
+      { key: 'ketoneEsters', label: 'Ketone Esters', color: '#7C3AED', step: 5, unit: 'mL' },
+      { key: 'mctOil', label: 'MCT Oil', color: '#059669', step: 5, unit: 'mL' },
+      { key: 'boneBrothSaint', label: 'Bone Broth w/ Collagen — Saint', color: '#B85450', step: 1, unit: 'cup' },
+      { key: 'boneBrothHome', label: 'Bone Broth — Home', color: '#D4736F', step: 1, unit: 'cup' },
+      { key: 'soloLemonOrange', label: 'Solo Lemon Orange', color: '#F59E0B', step: 1, unit: 'can' },
+      { key: 'peanutButterSpoon', label: 'Peanut Butter Spoon', color: '#A0522D', step: 1, unit: 'spn' }
     ];
 
     // ============ UTILITY FUNCTIONS ============
@@ -577,13 +577,15 @@
             <div style={{ fontSize: '10px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Drinks & Fasting Supplements</div>
             {DRINK_ITEMS.map((item, idx) => {
               const count = selectedData[item.key] || 0;
+              const step = item.step || 1;
+              const displayCount = count % 1 !== 0 ? count.toFixed(1) : count;
               return (
                 <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 0', borderTop: idx > 0 ? '1px solid #f3f4f6' : 'none' }}>
                   <div style={{ width: '6px', height: '6px', borderRadius: '2px', background: item.color, flexShrink: 0 }} />
                   <span style={{ fontSize: '10px', fontWeight: 500, color: '#374151', flex: 1 }}>{item.label}</span>
-                  <button style={{ width: '22px', height: '20px', border: '1px solid #e5e7eb', borderRadius: '4px', background: '#f9fafb', fontSize: '12px', fontWeight: 700, cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1 }} onClick={() => removeCount(item.key)}>−</button>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: count > 0 ? item.color : '#d1d5db', minWidth: '16px', textAlign: 'center' }}>{count}</span>
-                  <button style={{ width: '22px', height: '20px', border: '1px solid #e5e7eb', borderRadius: '4px', background: '#f9fafb', fontSize: '12px', fontWeight: 700, cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1 }} onClick={() => addCount(item.key)}>+</button>
+                  <button style={{ width: '22px', height: '20px', border: '1px solid #e5e7eb', borderRadius: '4px', background: '#f9fafb', fontSize: '12px', fontWeight: 700, cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1 }} onClick={() => removeCount(item.key, step)}>−</button>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: count > 0 ? item.color : '#d1d5db', minWidth: '36px', textAlign: 'center' }}>{displayCount}<span style={{ fontSize: '8px', fontWeight: 500, color: '#9ca3af' }}> {item.unit}</span></span>
+                  <button style={{ width: '22px', height: '20px', border: '1px solid #e5e7eb', borderRadius: '4px', background: '#f9fafb', fontSize: '12px', fontWeight: 700, cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1 }} onClick={() => addCount(item.key, step)}>+</button>
                 </div>
               );
             })}
