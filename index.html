@@ -487,7 +487,7 @@
                     <div style={{ width: '6px', height: '6px', borderRadius: '2px', background: item.color, flexShrink: 0 }} />
                     <span style={{ fontSize: '10px', fontWeight: 500, color: '#374151', flex: 1, whiteSpace: 'nowrap' }}>{item.label}</span>
                     <button style={{ width: '22px', height: '20px', border: '1px solid #e5e7eb', borderRadius: '4px', background: '#f9fafb', fontSize: '12px', fontWeight: 700, cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1 }} onClick={() => removeCount(item.key, step)}>−</button>
-                    <span style={{ fontSize: '13px', fontWeight: 700, color: count > 0 ? item.color : '#d1d5db', minWidth: '16px', textAlign: 'center' }}>{count % 1 !== 0 ? count.toFixed(1) : count}</span>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: count > 0 ? item.color : '#d1d5db', minWidth: '16px', textAlign: 'center' }}>{count % 1 !== 0 ? count.toFixed(2) : count}</span>
                     <button style={{ width: '22px', height: '20px', border: '1px solid #e5e7eb', borderRadius: '4px', background: '#f9fafb', fontSize: '12px', fontWeight: 700, cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, lineHeight: 1 }} onClick={() => addCount(item.key, step)}>+</button>
                   </div>
                 );
@@ -661,7 +661,7 @@
             </div>
           </div>
 
-          {/* ---- Dual-Axis Chart: Caffeine (left) + Nicotine (right) ---- */}
+          {/* ---- Dual Bar Chart: Caffeine (blue) + Nicotine (red) side by side ---- */}
           {(() => {
             const chartDays = getCurrentMonthDays();
             const chartHeight = 140;
@@ -687,11 +687,11 @@
                   <div style={{ fontWeight: 700, fontSize: '14px', color: '#111827' }}>Daily Intake</div>
                   <div style={{ display: 'flex', gap: '12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <div style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#5588BB' }} />
+                      <div style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#90CCE6' }} />
                       <span style={{ fontSize: '9px', color: '#6b7280' }}>Caffeine</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#B85450' }} />
+                      <div style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#E07B6B' }} />
                       <span style={{ fontSize: '9px', color: '#6b7280' }}>Nicotine</span>
                     </div>
                   </div>
@@ -709,42 +709,40 @@
                       <span style={{ fontSize: '7px', color: '#B85450', fontWeight: 600 }}>{val}</span>
                     </div>
                   ))}
-                  <div style={{ display: 'flex', alignItems: 'flex-end', height: chartHeight + 'px', gap: '1px', background: '#fafafa', borderRadius: '8px', padding: '8px 4px 0', position: 'relative', borderBottom: '1px solid #e5e7eb' }}>
-                    {/* Grid lines based on caffeine scale */}
+                  <div style={{ display: 'flex', alignItems: 'flex-end', height: chartHeight + 'px', gap: '1px', background: '#fafafa', borderRadius: '8px', padding: '8px 2px 0', position: 'relative', borderBottom: '1px solid #e5e7eb' }}>
+                    {/* Grid lines */}
                     {caffGridLines.map(val => (
                       <div key={'g' + val} style={{ position: 'absolute', left: 0, right: 0, bottom: ((val / maxCaff) * 100) + '%', borderTop: '1px dashed rgba(85,136,187,0.15)', pointerEvents: 'none', zIndex: 0 }} />
                     ))}
-                    {/* Bars + nicotine dots */}
+                    {/* Side-by-side bars */}
                     {chartDays.map((day, i) => {
                       const caff = caffValues[i];
                       const nic = nicValues[i];
                       const isSelected = day.key === selectedDate;
-                      const barH = caff > 0 ? Math.max(3, (caff / maxCaff) * chartInner) : 0;
-                      const nicDotBottom = nic > 0 ? (nic / maxNic) * chartInner : null;
+                      const caffH = caff > 0 ? Math.max(3, (caff / maxCaff) * chartInner) : 0;
+                      const nicH = nic > 0 ? Math.max(3, (nic / maxNic) * chartInner) : 0;
                       return (
-                        <div key={day.key} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', cursor: 'pointer', zIndex: 1, position: 'relative' }} onClick={() => setSelectedDate(day.key)}>
-                          {/* Nicotine dot */}
-                          {nicDotBottom !== null && (
-                            <div style={{
-                              position: 'absolute', bottom: nicDotBottom + 'px', left: '50%', transform: 'translateX(-50%)',
-                              width: '5px', height: '5px', borderRadius: '50%', background: '#B85450',
-                              zIndex: 3
-                            }} />
-                          )}
-                          {/* Caffeine bar */}
+                        <div key={day.key} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: '1px', cursor: 'pointer', zIndex: 1 }} onClick={() => setSelectedDate(day.key)}>
                           <div style={{
-                            width: '70%', height: barH + 'px',
-                            background: isSelected ? '#7AB8D9' : '#90CCE6',
-                            borderRadius: '2px 2px 0 0', minHeight: caff > 0 ? '3px' : '0px',
-                            boxShadow: isSelected ? '0 0 0 1.5px #4A90A4' : 'none',
-                            opacity: caff > 0 ? 1 : 0
+                            flex: 1, height: caffH + 'px',
+                            background: '#90CCE6',
+                            borderRadius: '2px 0 0 0',
+                            opacity: caff > 0 ? 1 : 0,
+                            boxShadow: isSelected ? '0 0 0 1px #4A90A4' : 'none'
+                          }} />
+                          <div style={{
+                            flex: 1, height: nicH + 'px',
+                            background: '#E07B6B',
+                            borderRadius: '0 2px 0 0',
+                            opacity: nic > 0 ? 1 : 0,
+                            boxShadow: isSelected ? '0 0 0 1px #4A90A4' : 'none'
                           }} />
                         </div>
                       );
                     })}
                   </div>
                   {/* Day labels */}
-                  <div style={{ display: 'flex', padding: '6px 4px 0', gap: '1px' }}>
+                  <div style={{ display: 'flex', padding: '6px 2px 0', gap: '1px' }}>
                     {chartDays.map((day) => {
                       const isSelected = day.key === selectedDate;
                       const d = history[day.key];
@@ -758,7 +756,6 @@
                     })}
                   </div>
                 </div>
-                {/* Axis labels */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', padding: '0 4px' }}>
                   <span style={{ fontSize: '8px', color: '#5588BB', fontWeight: 600 }}>← Caffeine (mg)</span>
                   <span style={{ fontSize: '8px', color: '#B85450', fontWeight: 600 }}>Nicotine (mg) →</span>
